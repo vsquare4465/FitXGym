@@ -1,0 +1,6 @@
+{
+  "name": "Fit X Gym",
+  "description": "Premium Gym Management & Fitness Platform for visitors, members, and management. Featuring interactive dashboards, QR check-in simulation, membership tracking, and business analytics.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

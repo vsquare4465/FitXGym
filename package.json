@@ -1,0 +1,61 @@
+{
+  "name": "fitx-gym",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -n web,api -c cyan,magenta \"vite --port=3000 --host=0.0.0.0 --strictPort\" \"tsx watch server/index.ts\"",
+    "dev:kill": "powershell -ExecutionPolicy Bypass -File scripts/kill-dev-ports.ps1",
+    "dev:clean": "npm run dev:kill && npm run dev",
+    "dev:web": "vite --port=3000 --host=0.0.0.0",
+    "dev:api": "tsx watch server/index.ts",
+    "build": "vite build",
+    "start": "tsx server/index.ts",
+    "start:prod": "npm run build && cross-env NODE_ENV=production tsx server/index.ts",
+    "prod:check": "cross-env NODE_ENV=production node scripts/prod-check.mjs",
+    "preview": "vite preview",
+    "lint": "tsc --noEmit",
+    "db:push": "prisma db push",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:create-local": "powershell -ExecutionPolicy Bypass -File scripts/setup-local-postgres.ps1",
+    "db:setup": "prisma db push && tsx prisma/seed.ts",
+    "postinstall": "prisma generate"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.5.0",
+    "@tailwindcss/vite": "^4.1.14",
+    "@vitejs/plugin-react": "^5.0.4",
+    "bcryptjs": "^3.0.2",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "lucide-react": "^0.546.0",
+    "motion": "^12.23.24",
+    "react": "^19.0.1",
+    "react-dom": "^19.0.1",
+    "react-router-dom": "^7.4.0",
+    "tsx": "^4.21.0"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.9",
+    "@types/node": "^22.14.0",
+    "autoprefixer": "^10.4.21",
+    "concurrently": "^9.1.2",
+    "cross-env": "^7.0.3",
+    "esbuild": "^0.25.0",
+    "prisma": "^6.5.0",
+    "tailwindcss": "^4.1.14",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.3"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  }
+}

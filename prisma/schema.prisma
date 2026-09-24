@@ -1,0 +1,242 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  OWNER
+  RECEPTION
+  TRAINER
+  MEMBER
+}
+
+enum MembershipType {
+  Paid
+  Complimentary
+  Staff
+}
+
+enum MemberStatus {
+  Active
+  Expired
+  Frozen
+  Pending
+}
+
+enum PaymentStatus {
+  Completed
+  Pending
+  Failed
+}
+
+enum ExpenseStatus {
+  Paid
+  Pending
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         UserRole @default(MEMBER)
+  jobTitle     String?
+  permissions  Json     @default("{}")
+  memberId     String?  @unique
+  member       Member?  @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Member {
+  id                  String         @id
+  name                String
+  email               String         @unique
+  phone               String
+  whatsapp            String?
+  dateOfBirth         String?
+  address             String?
+  passwordHash        String?
+  photo               String         @default("")
+  joinDate            String
+  expiryDate          String
+  planId              String
+  membershipType      MembershipType @default(Paid)
+  status              MemberStatus   @default(Pending)
+  emergencyContact    Json           @default("{}")
+  medicalHistory      Json           @default("[]")
+  idProofUrl          String?
+  qrCodeValue         String         @default("")
+  weightHistory       Json           @default("[]")
+  measurementsHistory Json           @default("[]")
+  bmi                 Float          @default(0)
+  bodyFat             Float          @default(0)
+  progressImages      Json           @default("[]")
+  workoutPlan         Json           @default("[]")
+  dietPlan            Json           @default("[]")
+  messages            Json           @default("[]")
+  user                User?
+  payments            Payment[]
+  attendance          AttendanceRecord[]
+  memberships         Membership[]
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+}
+
+model Plan {
+  id          String  @id
+  name        String
+  duration    String
+  price       Int
+  description String  @default("")
+  features    Json
+  popular     Boolean @default(false)
+  active      Boolean @default(true)
+}
+
+model Membership {
+  id         String   @id @default(cuid())
+  memberId   String
+  member     Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  planId     String
+  startDate  String
+  endDate    String
+  status     String
+  amount     Float    @default(0)
+  paidAmount Float    @default(0)
+  createdAt  DateTime @default(now())
+}
+
+model Payment {
+  id            String        @id @default(cuid())
+  memberId      String
+  member        Member        @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  memberName    String
+  amount        Float
+  date          String
+  category      String
+  paymentMethod String
+  status        PaymentStatus @default(Completed)
+  invoiceNo      String
+  referenceNo    String?
+  membershipId   String?
+  notes          String?
+  recordedBy     String?
+  expectedAmount Float?
+  createdAt      DateTime      @default(now())
+}
+
+model Expense {
+  id            String        @id @default(cuid())
+  category      String
+  amount        Float
+  date          String
+  description   String
+  paymentMethod String
+  vendor        String?
+  paidBy        String?
+  receipt       String?
+  notes         String?
+  status        ExpenseStatus @default(Paid)
+  createdAt     DateTime      @default(now())
+}
+
+model AttendanceRecord {
+  id         String  @id @default(cuid())
+  memberId   String
+  member     Member  @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  memberName String
+  photo      String?
+  role       String  @default("Member")
+  date       String
+  checkIn    String
+  checkOut   String?
+  duration   Int?
+  status     String  @default("On Time")
+  createdAt  DateTime @default(now())
+}
+
+model Staff {
+  id              String @id
+  name            String
+  role            String
+  salary          Float
+  shift           String
+  joiningDate     String
+  attendanceRate  Int    @default(100)
+  performance     Int    @default(4)
+  leavesRemaining Int    @default(12)
+  documents       Json   @default("[]")
+  salaryHistory   Json   @default("[]")
+  tasks           Json   @default("[]")
+}
+
+model InventoryItem {
+  id            String @id
+  name          String
+  category      String
+  stock         Int
+  price         Float
+  costPrice     Float
+  supplier      String
+  lowStockLimit Int
+  image         String?
+  salesCount    Int    @default(0)
+}
+
+model Lead {
+  id             String   @id @default(cuid())
+  name           String
+  phone          String
+  whatsapp       String?
+  email          String?
+  message        String?
+  interestedPlan String?
+  subject        String?
+  notes          String?
+  source         String
+  status         String   @default("New")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Testimonial {
+  id       String  @id @default(cuid())
+  name     String
+  rating   Int
+  text     String
+  date     String
+  approved Boolean @default(false)
+}
+
+model GalleryImage {
+  id        String   @id @default(cuid())
+  url       String
+  caption   String   @default("")
+  featured  Boolean  @default(false)
+  active    Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
+model WebsiteSetting {
+  key   String @id
+  value String
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  message   String
+  createdAt DateTime @default(now())
+}
+
+model QrToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
