@@ -4,7 +4,9 @@ services:
     name: fitx-gym
     runtime: node
     plan: free
-    buildCommand: npm ci && npx prisma generate && npm run build && npx prisma db push
+    # Seed runs on deploy so you do not need Render Shell (paid).
+    # Production seed only creates missing owners/plans — it will not reset live passwords.
+    buildCommand: npm ci && npx prisma generate && npm run build && npx prisma db push && npm run db:seed
     startCommand: npm start
     healthCheckPath: /api/health
     envVars:
@@ -20,6 +22,12 @@ services:
         value: "true"
       - key: SEED_DEMO_DATA
         value: "false"
+      - key: PUBLIC_SITE_URL
+        sync: false
+      - key: SEED_OWNER1_EMAIL
+        sync: false
+      - key: SEED_OWNER1_PASSWORD
+        sync: false
 
 databases:
   - name: fitx-gym-db

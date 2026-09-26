@@ -97,8 +97,9 @@ Health check: http://localhost:3001/api/health
 2. Create account at [render.com](https://render.com)
 3. **New → Blueprint** → connect repo → uses `render.yaml`
 4. Set `JWT_SECRET` manually in Render dashboard (override generated if needed)
-5. After deploy, run **Shell** once: `npm run db:seed`
-6. Add custom domain in Render → update DNS at registrar
+5. Seed runs in the **build** (`npm run db:seed`). Free plan has no Shell — that is fine.
+   - Or seed once from your laptop with Render’s **External** `DATABASE_URL` (see [GO-LIVE.md](./GO-LIVE.md)).
+6. Add custom domain in Render → update DNS at registrar (GoDaddy steps in [GO-LIVE.md](./GO-LIVE.md))
 7. Login: `https://yourdomain.com/admin/login`
 
 **Build command:** `npm ci && npx prisma generate && npm run build && npx prisma db push`  

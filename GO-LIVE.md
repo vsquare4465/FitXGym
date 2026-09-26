@@ -23,6 +23,9 @@ JWT_SECRET=<your-32+-char-secret>
 PORT=3001
 TRUST_PROXY=true
 PUBLIC_SITE_URL=https://yourdomain.com
+SEED_DEMO_DATA=false
+SEED_OWNER1_EMAIL=you@yourdomain.com
+SEED_OWNER1_PASSWORD=A-Strong-Password-Here
 ```
 
 Do **not** commit `.env` to git.
@@ -33,9 +36,40 @@ Do **not** commit `.env` to git.
 
 ### Render (easiest)
 
+You do **not** need Render Shell. Free plan has no Shell — that is expected.
+
 1. [render.com](https://render.com) → New → Blueprint → connect repo (`render.yaml` included)
-2. After first deploy, open **Shell** and run: `npm run db:seed`
-3. Settings → Custom domain → point DNS from your registrar
+2. Set env vars (see below). Redeploy so `db:push` + `db:seed` run in the **build**.
+3. Settings → Custom Domains → add `yourdomain.com` and `www.yourdomain.com`
+4. Point DNS at GoDaddy (see **GoDaddy DNS** below)
+
+**If the first deploy already finished before seed was in the build**, create the owner account from your laptop (no Shell):
+
+```powershell
+# Render → your Postgres → Connections → External Database URL
+$env:DATABASE_URL="<External Database URL from Render, not Internal>"
+$env:NODE_ENV="production"
+$env:SEED_DEMO_DATA="false"
+$env:SEED_OWNER1_EMAIL="you@yourdomain.com"
+$env:SEED_OWNER1_PASSWORD="A-Strong-Password-Here"
+npm run db:seed
+```
+
+### GoDaddy DNS (Render)
+
+1. Render → **fitx-gym** service → **Settings** → **Custom Domains** → add:
+   - `yourdomain.com`
+   - `www.yourdomain.com`
+2. Copy the exact records Render shows. Then in GoDaddy → **My Products** → domain → **DNS** → **DNS Records**:
+   - **www**: Type `CNAME`, Name `www`, Value `fitx-gym.onrender.com` (use *your* Render URL — no `https://`)
+   - **root (@)**: Type `A`, Name `@`, Value `216.24.57.1` (Render load balancer). GoDaddy does not support CNAME on `@`.
+3. Delete anything that fights this:
+   - Old `A` / `AAAA` records on `@`
+   - GoDaddy **Domain Forwarding** / parking page
+   - Parked-page `CNAME` on `www`
+4. Wait for Render to show the domain as **Verified** (minutes, sometimes a few hours). SSL is automatic after that.
+
+Then set `PUBLIC_SITE_URL=https://yourdomain.com` in Render env vars and redeploy.
 
 ### Railway
 

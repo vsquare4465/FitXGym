@@ -34,47 +34,51 @@ async function main() {
   const hash1 = await bcrypt.hash(owner1Pass, 12);
   const hash2 = await bcrypt.hash(owner2Pass, 12);
 
-  await prisma.user.upsert({
-    where: { email: owner1Email },
-    create: {
-      email: owner1Email,
-      passwordHash: hash1,
-      name: 'Gym Owner 1',
-      role: 'OWNER',
-    },
-    update: { passwordHash: hash1, name: 'Gym Owner 1', role: 'OWNER' },
-  });
+  // In production, create missing owners/plans only — never overwrite live passwords or prices.
+  async function upsertOwner(email: string, passwordHash: string, name: string) {
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (!existing) {
+      await prisma.user.create({
+        data: { email, passwordHash, name, role: 'OWNER' },
+      });
+      return;
+    }
+    if (!isProd) {
+      await prisma.user.update({
+        where: { email },
+        data: { passwordHash, name, role: 'OWNER' },
+      });
+    }
+  }
 
-  await prisma.user.upsert({
-    where: { email: owner2Email },
-    create: {
-      email: owner2Email,
-      passwordHash: hash2,
-      name: 'Gym Owner 2',
-      role: 'OWNER',
-    },
-    update: { passwordHash: hash2, name: 'Gym Owner 2', role: 'OWNER' },
-  });
+  await upsertOwner(owner1Email, hash1, 'Gym Owner 1');
+  await upsertOwner(owner2Email, hash2, 'Gym Owner 2');
 
   for (const p of MEMBERSHIP_PLANS) {
-    await prisma.plan.upsert({
-      where: { id: p.id },
-      create: {
-        id: p.id,
-        name: p.name,
-        duration: p.duration,
-        price: p.price,
-        features: p.features,
-        popular: p.popular ?? false,
-      },
-      update: {
-        name: p.name,
-        duration: p.duration,
-        price: p.price,
-        features: p.features,
-        popular: p.popular ?? false,
-      },
-    });
+    const existing = await prisma.plan.findUnique({ where: { id: p.id } });
+    if (!existing) {
+      await prisma.plan.create({
+        data: {
+          id: p.id,
+          name: p.name,
+          duration: p.duration,
+          price: p.price,
+          features: p.features,
+          popular: p.popular ?? false,
+        },
+      });
+    } else if (!isProd) {
+      await prisma.plan.update({
+        where: { id: p.id },
+        data: {
+          name: p.name,
+          duration: p.duration,
+          price: p.price,
+          features: p.features,
+          popular: p.popular ?? false,
+        },
+      });
+    }
   }
 
   if (seedDemo) for (const m of INITIAL_MEMBERS) {
