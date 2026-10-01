@@ -14,7 +14,7 @@ export type AdminModule =
 
 export type AdminPermissions = Record<AdminModule, PermissionLevel>;
 
-export type AdminRole = 'OWNER' | 'RECEPTION' | 'TRAINER';
+export type AdminRole = 'OWNER' | 'RECEPTION' | 'TRAINER' | 'MANAGER' | 'ACCOUNTANT' | 'HOUSEKEEPING' | 'OTHER';
 
 export const ADMIN_MODULES: AdminModule[] = [
   'dashboard', 'members', 'plans', 'payments', 'expenses',
@@ -38,6 +38,10 @@ export const ROLE_LABELS: Record<AdminRole, string> = {
   OWNER: 'Owner (full access)',
   RECEPTION: 'Receptionist',
   TRAINER: 'Trainer',
+  MANAGER: 'Manager',
+  ACCOUNTANT: 'Accountant',
+  HOUSEKEEPING: 'Housekeeping',
+  OTHER: 'Other',
 };
 
 const FULL: AdminPermissions = Object.fromEntries(
@@ -71,6 +75,35 @@ export function defaultPermissions(role: AdminRole | string): AdminPermissions {
         attendance: 'read',
         messages: 'write',
       };
+    case 'MANAGER':
+      return {
+        ...NONE,
+        dashboard: 'read',
+        members: 'write',
+        plans: 'read',
+        payments: 'write',
+        expenses: 'write',
+        attendance: 'write',
+        leads: 'write',
+        messages: 'write',
+        website: 'read',
+      };
+    case 'ACCOUNTANT':
+      return {
+        ...NONE,
+        dashboard: 'read',
+        payments: 'write',
+        expenses: 'write',
+        members: 'read',
+      };
+    case 'HOUSEKEEPING':
+      return {
+        ...NONE,
+        dashboard: 'read',
+        attendance: 'write',
+      };
+    case 'OTHER':
+      return { ...NONE, dashboard: 'read' };
     default:
       return { ...NONE };
   }

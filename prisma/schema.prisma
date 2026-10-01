@@ -11,6 +11,10 @@ enum UserRole {
   OWNER
   RECEPTION
   TRAINER
+   MANAGER
+  ACCOUNTANT
+  HOUSEKEEPING
+  OTHER
   MEMBER
 }
 
@@ -239,4 +243,15 @@ model QrToken {
   token     String   @unique
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
+}
+
+model PasswordOtp {
+  id        String   @id @default(cuid())
+  email     String
+  codeHash  String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([email])
 }

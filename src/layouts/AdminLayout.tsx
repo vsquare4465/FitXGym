@@ -84,7 +84,7 @@ export default function AdminLayout() {
           </div>
           <div className="min-w-0">
             <p className="text-sm font-medium text-white truncate">{user?.name}</p>
-            <p className="text-[10px] text-zinc-500 truncate">{user?.email}</p>
+            <p className="text-[10px] text-zinc-500 truncate">Profile & password</p>
           </div>
           <UserCircle size={16} className="text-zinc-600 ml-auto flex-shrink-0" />
         </Link>

@@ -19,7 +19,8 @@ import SectionHeading3D from '../../components/public/SectionHeading3D';
 import TiltCard from '../../components/public/TiltCard';
 import { useIsCompactPreview } from '../../context/PreviewViewportContext';
 import { dedupeGalleryByUrl } from '../../lib/galleryUtils';
-import { firstGymFloorImage } from '../../lib/siteImages';
+import { whatsappUrl } from '../../lib/whatsapp';
+import { dedicatedImage } from '../../lib/siteImages';
 import { grid1Or2, grid1Or2Or3, grid1Or2Or4, grid1Or3, sectionPadding } from '../../lib/previewLayoutClasses';
 
 const ENQUIRY_SUBJECTS = [
@@ -87,18 +88,11 @@ export default function HomePage({
   const featuredGallery = uniqueGallery.filter(g => g.featured).length
     ? uniqueGallery.filter(g => g.featured)
     : uniqueGallery;
-  // Gym-floor photos only — never reuse the owner portrait as hero / about / PT.
-  const gymFloorPhoto = firstGymFloorImage(
-    settings.ownerPhoto,
-    settings.aboutImage,
-    ...featuredGallery.map(g => g.url),
-    ...uniqueGallery.map(g => g.url),
-  );
-  const heroImage = firstGymFloorImage(settings.ownerPhoto, settings.heroImage, gymFloorPhoto)
-    || 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=1600&q=80';
-  const aboutImage = firstGymFloorImage(settings.ownerPhoto, settings.aboutImage, gymFloorPhoto);
-  const ptImageSrc = firstGymFloorImage(settings.ownerPhoto, settings.ptImage, gymFloorPhoto);
-  const whatsapp = settings.whatsapp || '919760260553';
+  const heroImage = dedicatedImage(settings.heroImage);
+  const aboutImage = dedicatedImage(settings.aboutImage);
+  const ptImageSrc = dedicatedImage(settings.ptImage);
+  const whatsapp = settings.whatsapp || '';
+  const whatsappHref = whatsappUrl(whatsapp, `Hi, I'd like to know more about ${gymName}.`);
   const heroHeading = settings.heroHeading || 'Your neighborhood gym in Khurja';
   const heroDesc = settings.heroDescription || 'Strength training, cardio, and friendly guidance — whether you\'re just starting or already consistent.';
 
@@ -166,7 +160,11 @@ export default function HomePage({
     <div className={`bg-zinc-950 ${previewMode ? 'overflow-x-hidden max-w-full' : ''}`}>
       {/* Hero */}
       <section className={`relative flex items-end overflow-hidden ${previewMode ? 'min-h-[520px]' : 'min-h-[90vh]'}`}>
-        <img src={heroImage} alt={gymName} className="absolute inset-0 w-full h-full object-cover scale-105" referrerPolicy="no-referrer" />
+        {heroImage ? (
+          <img src={heroImage} alt="" className="absolute inset-0 w-full h-full object-cover scale-105" referrerPolicy="no-referrer" />
+        ) : (
+          <div className="absolute inset-0 bg-zinc-950" />
+        )}
         <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/75 to-zinc-950/40" />
         <div className="absolute inset-0 bg-gradient-to-r from-zinc-950/90 via-zinc-950/40 to-transparent" />
         <HeroDepthLayers />
@@ -184,9 +182,11 @@ export default function HomePage({
               <a href="#contact" className={`btn-3d inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-black font-semibold ${compact ? 'w-full' : ''}`}>
                 Enquire now <ArrowRight size={18} />
               </a>
-              <a href={`https://wa.me/${whatsapp}?text=${encodeURIComponent(`Hi, I'd like to know more about ${gymName}.`)}`} target="_blank" rel="noopener noreferrer" className={`btn-3d-outline inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl border border-zinc-600 hover:border-zinc-400 text-white font-medium ${compact ? 'w-full' : ''}`}>
+              {whatsappHref && (
+              <a href={whatsappHref} target="_blank" rel="noopener noreferrer" className={`btn-3d-outline inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl border border-zinc-600 hover:border-zinc-400 text-white font-medium ${compact ? 'w-full' : ''}`}>
                 <MessageCircle size={18} /> WhatsApp us
               </a>
+              )}
               <a href="#plans" className={`inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl text-zinc-300 hover:text-white font-medium text-sm transition-colors ${compact ? 'w-full' : ''}`}>View plans</a>
             </div>
           </motion.div>

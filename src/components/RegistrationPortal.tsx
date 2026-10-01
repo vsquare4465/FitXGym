@@ -2,7 +2,8 @@ import React, { useState, useRef } from 'react';
 import { Plan, Member } from '../types';
 import { MEMBERSHIP_PLANS } from '../data/mockData';
 import { User, Phone, Mail, Award, Clipboard, ShieldCheck, Heart, Users, CreditCard, ChevronRight, CheckCircle2, QrCode, Camera, Upload, AlertTriangle } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { isValidEmail, phoneValidationMessage } from '../lib/validation';
+import { motion } from 'motion/react';
 
 interface RegistrationPortalProps {
   plans?: Plan[];
@@ -15,7 +16,7 @@ export default function RegistrationPortal({ plans = [], onRegisterSuccess, preS
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [photo, setPhoto] = useState('https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&auto=format&fit=crop&q=80');
+  const [photo, setPhoto] = useState('');
   const [idProof, setIdProof] = useState('');
   const [password, setPassword] = useState('');
   const [emergencyName, setEmergencyName] = useState('');
@@ -99,20 +100,16 @@ export default function RegistrationPortal({ plans = [], onRegisterSuccess, preS
       
       let isValid = true;
       
-      // Email validation
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email)) {
+      if (!isValidEmail(email)) {
         setEmailError('Please enter a valid email address (e.g., name@domain.com)');
         isValid = false;
       } else {
         setEmailError('');
       }
 
-      // Phone validation
-      const phoneDigits = phone.replace(/[\s\-\(\)\+]/g, '');
-      const phoneRegex = /^[0-9]{10,15}$/;
-      if (!phoneRegex.test(phoneDigits)) {
-        setPhoneError('Please enter a valid phone number (10 to 15 digits)');
+      const phoneError = phoneValidationMessage(phone);
+      if (phoneError) {
+        setPhoneError(phoneError);
         isValid = false;
       } else {
         setPhoneError('');
@@ -158,7 +155,7 @@ export default function RegistrationPortal({ plans = [], onRegisterSuccess, preS
         email,
         phone,
         password: password || '123456',
-        photo: photo || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&auto=format&fit=crop&q=80',
+        photo: photo || '',
         joinDate: formattedToday,
         expiryDate: finalExpiry,
         planId: finalPlanId,
@@ -169,7 +166,7 @@ export default function RegistrationPortal({ plans = [], onRegisterSuccess, preS
           relationship: emergencyRelation
         },
         medicalHistory: medicalNotes ? [medicalNotes] : ['None'],
-        idProofUrl: idProof || 'https://images.unsplash.com/photo-1554774853-aae0a22c8aa4?w=400&auto=format&fit=crop&q=80',
+        idProofUrl: idProof || '',
         qrCodeValue: qrValue,
         weightHistory: [
           { date: today.toLocaleString('en-US', { month: 'short', day: '2-digit' }), weight: 75.0 }

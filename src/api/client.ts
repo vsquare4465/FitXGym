@@ -1,5 +1,5 @@
 import { AdminPermissionsMap, AdminTeamUser, DashboardData, GalleryImage, Lead, MemberProfile } from '../types';
-import { AdminPermissions } from '../lib/adminPermissions';
+import { AdminPermissions, AdminRole } from '../lib/adminPermissions';
 
 const TOKEN_KEY = 'fitx_auth_token';
 
@@ -65,9 +65,10 @@ export const authApi = {
       token: string;
       user: {
         role: 'admin';
+        id: string;
         name: string;
         email: string;
-        adminRole: 'OWNER' | 'RECEPTION' | 'TRAINER';
+        adminRole: AdminRole;
         jobTitle?: string | null;
         permissions: AdminPermissions;
       };
@@ -82,16 +83,18 @@ export const authApi = {
     }),
   me: () => api<{
     user:
-      | { role: 'admin'; name: string; email: string; adminRole: 'OWNER' | 'RECEPTION' | 'TRAINER'; jobTitle?: string | null; permissions: AdminPermissions }
+      | { role: 'admin'; name: string; email: string; adminRole: AdminRole; jobTitle?: string | null; permissions: AdminPermissions }
       | { role: 'member'; name: string; email: string; memberId: string };
   }>('/auth/me', { auth: true }),
   updateProfile: (data: { name?: string; email?: string }) =>
-    api<{ user: { role: 'admin'; name: string; email: string; adminRole: 'OWNER' | 'RECEPTION' | 'TRAINER'; jobTitle?: string | null; permissions: AdminPermissions } }>(
+    api<{ user: { role: 'admin'; name: string; email: string; adminRole: AdminRole; jobTitle?: string | null; permissions: AdminPermissions } }>(
       '/auth/me',
       { method: 'PUT', auth: true, body: JSON.stringify(data) },
     ),
   changePassword: (currentPassword: string, newPassword: string) =>
     api('/auth/password', { method: 'PUT', auth: true, body: JSON.stringify({ currentPassword, newPassword }) }),
+  resetPassword: (email: string, otp: string, newPassword: string) =>
+    api('/auth/reset-password', { method: 'POST', body: JSON.stringify({ email, otp, newPassword }) }),
   logout: () => api('/auth/logout', { method: 'POST', auth: true }),
 };
 
@@ -101,7 +104,7 @@ export const teamApi = {
     name: string;
     email: string;
     password: string;
-    role: 'RECEPTION' | 'TRAINER';
+    role: Exclude<AdminRole, 'OWNER'>;
     jobTitle?: string;
     permissions?: Partial<AdminPermissionsMap>;
   }) => api<AdminTeamUser>('/team', { method: 'POST', auth: true, body: JSON.stringify(data) }),
@@ -109,11 +112,13 @@ export const teamApi = {
     name: string;
     email: string;
     password: string;
-    role: 'RECEPTION' | 'TRAINER';
+    role: Exclude<AdminRole, 'OWNER'>;
     jobTitle: string;
     permissions: Partial<AdminPermissionsMap>;
   }>) => api<AdminTeamUser>(`/team/${id}`, { method: 'PUT', auth: true, body: JSON.stringify(data) }),
   remove: (id: string) => api(`/team/${id}`, { method: 'DELETE', auth: true }),
+  generateResetOtp: (id: string) =>
+    api<{ email: string; code: string; expiresInMinutes: number }>(`/team/${id}/reset-otp`, { method: 'POST', auth: true }),
 };
 
 function dashboardQuery(period: string, from?: string, to?: string) {

@@ -3,6 +3,8 @@ import bcrypt from 'bcryptjs';
 import { prisma } from '../db.js';
 import { toClientMember } from '../lib/memberMapper.js';
 import { rateLimit } from '../lib/rateLimit.js';
+import { nextMemberId } from '../lib/memberId.js';
+import { isValidEmail, isValidIndianPhone } from '../lib/validation.js';
 
 const router = Router();
 const formLimiter = rateLimit({ windowMs: 60 * 1000, max: 10, message: 'Too many submissions. Please wait a minute.' });
@@ -86,29 +88,36 @@ router.post('/leads', formLimiter, async (req, res) => {
 
 router.post('/register', async (req, res) => {
   const { member, planPrice, paymentMethod } = req.body;
-  if (!member?.email || !member?.name) {
-    return res.status(400).json({ error: 'Invalid registration data' });
+  if (!member?.name?.trim()) {
+    return res.status(400).json({ error: 'Name is required' });
+  }
+  if (!isValidEmail(String(member.email || ''))) {
+    return res.status(400).json({ error: 'Enter a valid email address' });
+  }
+  if (!isValidIndianPhone(String(member.phone || ''))) {
+    return res.status(400).json({ error: 'Enter a valid 10-digit Indian mobile number' });
   }
 
+  const id = await nextMemberId();
   const passwordHash = await bcrypt.hash(member.password || '123456', 10);
 
   const created = await prisma.member.create({
     data: {
-      id: member.id,
+      id,
       name: member.name,
       email: member.email,
       phone: member.phone,
       whatsapp: member.whatsapp || member.phone,
       passwordHash,
-      photo: member.photo,
+      photo: member.photo || '',
       joinDate: member.joinDate,
       expiryDate: member.expiryDate,
       planId: member.planId,
       status: member.status,
       emergencyContact: member.emergencyContact ?? {},
       medicalHistory: member.medicalHistory ?? [],
-      idProofUrl: member.idProofUrl,
-      qrCodeValue: member.qrCodeValue,
+      idProofUrl: member.idProofUrl || '',
+      qrCodeValue: member.qrCodeValue || id,
       weightHistory: member.weightHistory ?? [],
       measurementsHistory: member.measurementsHistory ?? [],
       bmi: member.bmi ?? 0,

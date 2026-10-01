@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { authApi, setToken, getToken } from '../api/client';
-import { AdminPermissions, AdminModule, canAccess } from '../lib/adminPermissions';
+import { AdminPermissions, AdminModule, AdminRole, canAccess } from '../lib/adminPermissions';
 
 export type AuthUser =
   | {
@@ -8,7 +8,7 @@ export type AuthUser =
       id: string;
       name: string;
       email: string;
-      adminRole: 'OWNER' | 'RECEPTION' | 'TRAINER';
+      adminRole: AdminRole;
       jobTitle?: string | null;
       permissions: AdminPermissions;
     }

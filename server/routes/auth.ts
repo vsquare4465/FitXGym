@@ -4,6 +4,7 @@ import { prisma } from '../db.js';
 import { authMiddleware, buildAuthUser, signToken } from '../middleware/auth.js';
 import { isAdminRole } from '../lib/permissions.js';
 import { rateLimit } from '../lib/rateLimit.js';
+import { verifyAndConsumeOtp } from '../lib/passwordOtp.js';
 
 const router = Router();
 const loginLimiter = rateLimit({
@@ -18,7 +19,7 @@ function adminClientUser(authUser: Awaited<ReturnType<typeof buildAuthUser>>) {
     id: authUser.id,
     name: authUser.name,
     email: authUser.email,
-    adminRole: authUser.role as 'OWNER' | 'RECEPTION' | 'TRAINER',
+    adminRole: authUser.role,
     jobTitle: authUser.jobTitle,
     permissions: authUser.permissions,
   };
@@ -160,6 +161,36 @@ router.put('/password', authMiddleware, async (req, res) => {
   });
   await prisma.auditLog.create({
     data: { message: `SECURITY: ${user.name} changed their password` },
+  });
+  return res.json({ ok: true });
+});
+
+router.post('/reset-password', loginLimiter, async (req, res) => {
+  const { email, otp, newPassword } = req.body as {
+    email?: string;
+    otp?: string;
+    newPassword?: string;
+  };
+  if (!email?.trim() || !otp || !newPassword || newPassword.length < 6) {
+    return res.status(400).json({ error: 'Email, 6-digit code, and new password (min 6 chars) are required' });
+  }
+
+  const normalizedEmail = email.trim().toLowerCase();
+  const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+  if (!user || !isAdminRole(user.role)) {
+    return res.status(400).json({ error: 'Invalid email or code. Ask an owner to generate a new reset code from Team.' });
+  }
+  const validCode = await verifyAndConsumeOtp(normalizedEmail, otp);
+  if (!validCode) {
+    return res.status(400).json({ error: 'Invalid email or code. Ask an owner to generate a new reset code from Team.' });
+  }
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { passwordHash: await bcrypt.hash(newPassword, 10) },
+  });
+  await prisma.auditLog.create({
+    data: { message: `SECURITY: ${user.name} reset their password with a verification code` },
   });
   return res.json({ ok: true });
 });

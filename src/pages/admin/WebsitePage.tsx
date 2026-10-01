@@ -110,7 +110,7 @@ const BASIC_FIELDS = [
   { key: 'heroHeading', label: 'Hero heading' },
   { key: 'heroDescription', label: 'Hero description', rows: 3 },
   { key: 'phone', label: 'Phone' },
-  { key: 'whatsapp', label: 'WhatsApp number (country code, no +)' },
+  { key: 'whatsapp', label: 'WhatsApp number (e.g. 919760260553 — digits only, no @ or spaces)' },
   { key: 'email', label: 'Business email (shown on public website & contact)' },
   { key: 'address', label: 'Address' },
   { key: 'weekdayHours', label: 'Weekday hours' },
@@ -173,7 +173,8 @@ export default function WebsitePage() {
   }, [settings, gallery]);
 
   const updateField = (field: string, value: string) => {
-    setForm(prev => ({ ...prev, [field]: value }));
+    const next = field === 'whatsapp' ? value.replace(/^@+/, '') : value;
+    setForm(prev => ({ ...prev, [field]: next }));
   };
 
   const fieldProps = (key: string, label: string, rows?: number) => {
@@ -280,12 +281,13 @@ export default function WebsitePage() {
         {aboutFields.map(({ key, label, rows }) => (
           <SettingsField key={key} {...fieldProps(key, label, rows)} />
         ))}
-        <ImageField
-          label="About section image"
-          value={form.aboutImage}
-          onUpload={e => handleImageUpload(e, 'aboutImage')}
-          onRemove={() => removeImageField('aboutImage')}
-        />
+          <ImageField
+            label="About section image"
+            hint="Gym floor photo for the About section only. Leave empty rather than reusing the owner photo."
+            value={form.aboutImage}
+            onUpload={e => handleImageUpload(e, 'aboutImage')}
+            onRemove={() => removeImageField('aboutImage')}
+          />
       </section>
 
       <section className="space-y-4 rounded-xl border border-zinc-800 p-5">
@@ -311,6 +313,7 @@ export default function WebsitePage() {
         <SettingsField {...fieldProps('ptFeatures', 'What you get (one per line)', 6)} />
         <ImageField
           label="Training image"
+          hint="Personal training photo only. Do not reuse the owner or hero image."
           value={form.ptImage}
           onUpload={e => handleImageUpload(e, 'ptImage')}
           onRemove={() => removeImageField('ptImage')}
@@ -336,12 +339,14 @@ export default function WebsitePage() {
           />
           <ImageField
             label="Hero image"
+            hint="Homepage background only."
             value={form.heroImage}
             onUpload={e => handleImageUpload(e, 'heroImage')}
             onRemove={() => removeImageField('heroImage')}
           />
           <ImageField
             label="Owner photo"
+            hint="Coach page only — never used as the homepage banner."
             value={form.ownerPhoto}
             onUpload={e => handleImageUpload(e, 'ownerPhoto')}
             onRemove={() => removeImageField('ownerPhoto')}

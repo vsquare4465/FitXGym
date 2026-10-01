@@ -63,6 +63,35 @@ export function defaultPermissions(role: string): AdminPermissions {
         attendance: 'read',
         messages: 'write',
       };
+    case 'MANAGER':
+      return {
+        ...NONE,
+        dashboard: 'read',
+        members: 'write',
+        plans: 'read',
+        payments: 'write',
+        expenses: 'write',
+        attendance: 'write',
+        leads: 'write',
+        messages: 'write',
+        website: 'read',
+      };
+    case 'ACCOUNTANT':
+      return {
+        ...NONE,
+        dashboard: 'read',
+        payments: 'write',
+        expenses: 'write',
+        members: 'read',
+      };
+    case 'HOUSEKEEPING':
+      return {
+        ...NONE,
+        dashboard: 'read',
+        attendance: 'write',
+      };
+    case 'OTHER':
+      return { ...NONE, dashboard: 'read' };
     default:
       return { ...NONE };
   }
@@ -96,7 +125,7 @@ export function canAccess(
 }
 
 export function isAdminRole(role: string): boolean {
-  return role === 'OWNER' || role === 'RECEPTION' || role === 'TRAINER';
+  return role !== 'MEMBER';
 }
 
 export function isPaymentExempt(membershipType: string): boolean {

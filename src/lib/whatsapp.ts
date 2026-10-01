@@ -61,10 +61,24 @@ export function fillTemplate(
   return template.replace(/\{\{(\w+)\}\}/g, (_, key) => String(vars[key] ?? ''));
 }
 
-export function whatsappUrl(phone: string, message: string): string {
-  const digits = phone.replace(/\D/g, '');
-  const normalized = digits.length === 10 ? `91${digits}` : digits;
-  return `https://wa.me/${normalized}?text=${encodeURIComponent(message)}`;
+export function normalizeWhatsAppNumber(raw?: string): string {
+  if (!raw?.trim()) return '';
+  let v = raw.trim().replace(/^@+/, '');
+  const fromLink = v.match(/wa\.me\/(?:\+)?(\d+)/i) || v.match(/[?&]phone=(\+?\d+)/i);
+  if (fromLink) v = fromLink[1];
+  let digits = v.replace(/\D/g, '');
+  if (digits.startsWith('00')) digits = digits.slice(2);
+  if (digits.startsWith('0') && digits.length === 11) digits = digits.slice(1);
+  if (digits.length === 10 && /^[6-9]/.test(digits)) return `91${digits}`;
+  if (digits.length === 12 && /^91[6-9]\d{9}$/.test(digits)) return digits;
+  return '';
+}
+
+export function whatsappUrl(phone: string, message = ''): string {
+  const normalized = normalizeWhatsAppNumber(phone);
+  if (!normalized) return '';
+  const base = `https://wa.me/${normalized}`;
+  return message ? `${base}?text=${encodeURIComponent(message)}` : base;
 }
 
 /** Opens WhatsApp so user can pick contacts (works best on mobile). */
@@ -73,7 +87,9 @@ export function whatsappPickContactsUrl(message: string): string {
 }
 
 export function openWhatsApp(phone: string, message: string) {
-  window.open(whatsappUrl(phone, message), '_blank', 'noopener,noreferrer');
+  const url = whatsappUrl(phone, message);
+  if (!url) return;
+  window.open(url, '_blank', 'noopener,noreferrer');
 }
 
 export function openWhatsAppPicker(message: string) {

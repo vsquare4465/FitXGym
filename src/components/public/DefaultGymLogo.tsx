@@ -1,4 +1,4 @@
-type LogoSize = 'header' | 'footer' | 'hero';
+type LogoSize = 'header' | 'footer' | 'hero' | 'admin';
 
 interface Props {
   name?: string;
@@ -10,6 +10,7 @@ const heights: Record<LogoSize, number> = {
   header: 44,
   footer: 56,
   hero: 88,
+  admin: 36,
 };
 
 /** Inline SVG brand mark — used when no custom logo is uploaded. */

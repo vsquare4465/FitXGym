@@ -9,6 +9,7 @@ import StatusBadge from '../../components/admin/StatusBadge';
 import MemberProfileDrawer from '../../components/admin/MemberProfileDrawer';
 import { adminApi } from '../../api/client';
 import { fillTemplate, openWhatsApp, WHATSAPP_TEMPLATES } from '../../lib/whatsapp';
+import { isValidEmail, phoneValidationMessage } from '../../lib/validation';
 
 type Filter = 'all' | 'active' | 'expiring' | 'expired' | 'pending' | 'free';
 
@@ -19,6 +20,7 @@ export default function MembersPage() {
   const [filter, setFilter] = useState<Filter>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [formError, setFormError] = useState('');
   const [form, setForm] = useState({
     name: '',
     email: '',
@@ -54,14 +56,28 @@ export default function MembersPage() {
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    await adminApi.createMember({
-      ...form,
-      paidAmount: form.paidAmount ? parseFloat(form.paidAmount) : undefined,
-      paymentMethod: 'Cash',
-    });
-    setShowAdd(false);
-    setForm({ name: '', email: '', phone: '', planId: 'plan_monthly', paidAmount: '', membershipType: 'Paid' });
-    refresh();
+    setFormError('');
+    if (!isValidEmail(form.email)) {
+      setFormError('Enter a valid email address.');
+      return;
+    }
+    const phoneError = phoneValidationMessage(form.phone);
+    if (phoneError) {
+      setFormError(phoneError);
+      return;
+    }
+    try {
+      await adminApi.createMember({
+        ...form,
+        paidAmount: form.paidAmount ? parseFloat(form.paidAmount) : undefined,
+        paymentMethod: 'Cash',
+      });
+      setShowAdd(false);
+      setForm({ name: '', email: '', phone: '', planId: 'plan_monthly', paidAmount: '', membershipType: 'Paid' });
+      refresh();
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Could not create member');
+    }
   };
 
   const handleDeactivate = async (id: string) => {
@@ -180,9 +196,10 @@ export default function MembersPage() {
           <div className="absolute inset-0 bg-black/70" onClick={() => setShowAdd(false)} />
           <form onSubmit={handleAdd} className="relative bg-zinc-900 border border-zinc-800 rounded-xl p-5 w-full max-w-md space-y-3">
             <h3 className="font-semibold">Add new member</h3>
+            <p className="text-xs text-zinc-500">Member ID is assigned in sequence (MEM-0001, MEM-0002, …).</p>
             <input required placeholder="Full name" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
-            <input required type="email" placeholder="Email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
-            <input required placeholder="Phone" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
+            <input required type="email" placeholder="Email" value={form.email} onChange={e => { setForm({ ...form, email: e.target.value }); setFormError(''); }} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
+            <input required inputMode="numeric" placeholder="10-digit mobile (starts with 6–9)" value={form.phone} onChange={e => { setForm({ ...form, phone: e.target.value }); setFormError(''); }} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
             <select value={form.membershipType} onChange={e => setForm({ ...form, membershipType: e.target.value as MembershipType, paidAmount: e.target.value !== 'Paid' ? '' : form.paidAmount })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm">
               <option value="Paid">Paid member</option>
               <option value="Complimentary">Complimentary (free / known person)</option>
@@ -200,6 +217,7 @@ export default function MembersPage() {
             {form.membershipType !== 'Paid' && (
               <p className="text-xs text-violet-300">No payment will be recorded for complimentary / staff members.</p>
             )}
+            {formError && <p className="text-xs text-red-400">{formError}</p>}
             <button type="submit" className="w-full py-2.5 rounded-lg bg-orange-600 text-black font-semibold text-sm">Create member</button>
           </form>
         </div>

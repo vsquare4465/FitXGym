@@ -6,6 +6,7 @@ import { Member, MemberProfile, MembershipType, Plan } from '../../types';
 import { formatCurrency, formatDate } from '../../lib/format';
 import StatusBadge from './StatusBadge';
 import { fillTemplate, openWhatsApp, WHATSAPP_TEMPLATES } from '../../lib/whatsapp';
+import { isValidEmail, phoneValidationMessage } from '../../lib/validation';
 import { useAuth } from '../../context/AuthContext';
 
 interface Props {
@@ -30,6 +31,7 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
   const [showRenew, setShowRenew] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
+  const [editError, setEditError] = useState('');
   const [showReminder, setShowReminder] = useState(false);
   const [renewPlanId, setRenewPlanId] = useState('');
   const [paidAmount, setPaidAmount] = useState('');
@@ -87,30 +89,44 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
       emergencyPhone: m.emergencyContact?.phone || '',
       emergencyRelationship: m.emergencyContact?.relationship || '',
     });
+    setEditError('');
     setShowEdit(true);
   };
 
   const handleEditSave = async () => {
     if (!m || !memberId) return;
-    await adminApi.updateMember(memberId, {
-      ...m,
-      name: editForm.name,
-      email: editForm.email,
-      phone: editForm.phone,
-      whatsapp: editForm.whatsapp || editForm.phone,
-      dateOfBirth: editForm.dateOfBirth || undefined,
-      address: editForm.address || undefined,
-      membershipType: editForm.membershipType,
-      status: editForm.status,
-      emergencyContact: {
-        name: editForm.emergencyName,
-        phone: editForm.emergencyPhone,
-        relationship: editForm.emergencyRelationship,
-      },
-    });
-    setShowEdit(false);
-    onRefresh();
-    await reload(memberId);
+    if (!isValidEmail(editForm.email)) {
+      setEditError('Enter a valid email address.');
+      return;
+    }
+    const phoneError = phoneValidationMessage(editForm.phone);
+    if (phoneError) {
+      setEditError(phoneError);
+      return;
+    }
+    try {
+      await adminApi.updateMember(memberId, {
+        ...m,
+        name: editForm.name,
+        email: editForm.email,
+        phone: editForm.phone,
+        whatsapp: editForm.whatsapp || editForm.phone,
+        dateOfBirth: editForm.dateOfBirth || undefined,
+        address: editForm.address || undefined,
+        membershipType: editForm.membershipType,
+        status: editForm.status,
+        emergencyContact: {
+          name: editForm.emergencyName,
+          phone: editForm.emergencyPhone,
+          relationship: editForm.emergencyRelationship,
+        },
+      });
+      setShowEdit(false);
+      onRefresh();
+      await reload(memberId);
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : 'Update failed');
+    }
   };
 
   const openPaymentReminder = () => {
@@ -340,8 +356,8 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
             <div className="relative bg-zinc-900 border border-zinc-800 rounded-xl p-5 w-full max-w-md max-h-[90vh] overflow-y-auto space-y-3">
               <h3 className="font-semibold">Edit member details</h3>
               <input required placeholder="Full name" value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
-              <input required type="email" placeholder="Email" value={editForm.email} onChange={e => setEditForm({ ...editForm, email: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
-              <input required placeholder="Phone" value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
+              <input required type="email" placeholder="Email" value={editForm.email} onChange={e => { setEditForm({ ...editForm, email: e.target.value }); setEditError(''); }} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
+              <input required inputMode="numeric" placeholder="10-digit mobile" value={editForm.phone} onChange={e => { setEditForm({ ...editForm, phone: e.target.value }); setEditError(''); }} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
               <input placeholder="WhatsApp" value={editForm.whatsapp} onChange={e => setEditForm({ ...editForm, whatsapp: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
               <input type="date" placeholder="Date of birth" value={editForm.dateOfBirth} onChange={e => setEditForm({ ...editForm, dateOfBirth: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
               <textarea placeholder="Address" value={editForm.address} onChange={e => setEditForm({ ...editForm, address: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm resize-none" />
@@ -357,6 +373,7 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
               <input placeholder="Name" value={editForm.emergencyName} onChange={e => setEditForm({ ...editForm, emergencyName: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
               <input placeholder="Phone" value={editForm.emergencyPhone} onChange={e => setEditForm({ ...editForm, emergencyPhone: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
               <input placeholder="Relationship" value={editForm.emergencyRelationship} onChange={e => setEditForm({ ...editForm, emergencyRelationship: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
+              {editError && <p className="text-xs text-red-400">{editError}</p>}
               <button type="button" onClick={handleEditSave} className="w-full py-2.5 rounded-lg bg-orange-600 text-black font-semibold text-sm">Save changes</button>
             </div>
           </div>

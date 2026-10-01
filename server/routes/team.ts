@@ -1,8 +1,10 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../db.js';
-import { authMiddleware, buildAuthUser, requireAdmin, requirePermission } from '../middleware/auth.js';
+import { authMiddleware, requireAdmin, requirePermission } from '../middleware/auth.js';
+import { UserRole } from '@prisma/client';
 import { AdminPermissions, isAdminRole, resolvePermissions } from '../lib/permissions.js';
+import { createPasswordOtp, OTP_EXPIRES_MINUTES } from '../lib/passwordOtp.js';
 
 const router = Router();
 router.use(authMiddleware);
@@ -33,7 +35,7 @@ function toTeamUser(user: {
 
 router.get('/', requirePermission('team', 'read'), async (_req, res) => {
   const users = await prisma.user.findMany({
-    where: { role: { in: ['OWNER', 'RECEPTION', 'TRAINER'] } },
+    where: { role: { not: 'MEMBER' } },
     orderBy: { name: 'asc' },
   });
   res.json(users.map(u => toTeamUser(u)));
@@ -53,7 +55,7 @@ router.post('/', requirePermission('team', 'write'), async (req, res) => {
     return res.status(400).json({ error: 'Name, email, and password (min 6 chars) are required' });
   }
   if (!role || !isAdminRole(role) || role === 'OWNER') {
-    return res.status(400).json({ error: 'Role must be RECEPTION or TRAINER (owners are seeded separately)' });
+    return res.status(400).json({ error: 'Pick a staff role (not Owner)' });
   }
 
   const normalizedEmail = email.trim().toLowerCase();
@@ -65,7 +67,7 @@ router.post('/', requirePermission('team', 'write'), async (req, res) => {
       name: name.trim(),
       email: normalizedEmail,
       passwordHash: await bcrypt.hash(password, 10),
-      role: role as 'RECEPTION' | 'TRAINER',
+      role: role as UserRole,
       jobTitle: jobTitle?.trim() || null,
       permissions: permissions || {},
     },
@@ -102,7 +104,7 @@ router.put('/:id', requirePermission('team', 'write'), async (req, res) => {
     name?: string;
     email?: string;
     passwordHash?: string;
-    role?: 'OWNER' | 'RECEPTION' | 'TRAINER';
+    role?: UserRole;
     jobTitle?: string | null;
     permissions?: Partial<AdminPermissions>;
   } = {};
@@ -127,7 +129,7 @@ router.put('/:id', requirePermission('team', 'write'), async (req, res) => {
       return res.status(400).json({ error: 'Cannot demote the owner account here' });
     }
     if (role !== 'OWNER' || actor.role === 'OWNER') {
-      data.role = role as 'OWNER' | 'RECEPTION' | 'TRAINER';
+      data.role = role as UserRole;
     }
   }
 
@@ -157,6 +159,18 @@ router.delete('/:id', requirePermission('team', 'write'), async (req, res) => {
     data: { message: `TEAM: Removed staff login for ${target.name}` },
   });
   res.json({ ok: true });
+});
+
+router.post('/:id/reset-otp', requirePermission('team', 'write'), async (req, res) => {
+  const target = await prisma.user.findUnique({ where: { id: req.params.id } });
+  if (!target || !isAdminRole(target.role)) {
+    return res.status(404).json({ error: 'Team member not found' });
+  }
+  const code = await createPasswordOtp(target.email);
+  await prisma.auditLog.create({
+    data: { message: `SECURITY: Password reset code generated for ${target.name}` },
+  });
+  res.json({ email: target.email, code, expiresInMinutes: OTP_EXPIRES_MINUTES });
 });
 
 export default router;

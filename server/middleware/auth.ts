@@ -15,7 +15,7 @@ export interface AuthUser {
   id: string;
   email: string;
   name: string;
-  role: 'OWNER' | 'RECEPTION' | 'TRAINER' | 'MEMBER';
+  role: 'OWNER' | 'RECEPTION' | 'TRAINER' | 'MANAGER' | 'ACCOUNTANT' | 'HOUSEKEEPING' | 'OTHER' | 'MEMBER';
   memberId?: string | null;
   jobTitle?: string | null;
   permissions: AdminPermissions;

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Trash2, Shield } from 'lucide-react';
+import { Plus, Trash2, Shield, KeyRound } from 'lucide-react';
 import { teamApi } from '../../api/client';
 import { AdminTeamUser } from '../../types';
 import {
@@ -8,12 +8,15 @@ import {
   ROLE_LABELS,
   AdminModule,
   AdminPermissions,
+  AdminRole,
   PermissionLevel,
   resolvePermissions,
 } from '../../lib/adminPermissions';
 import { useAuth } from '../../context/AuthContext';
 
-const STAFF_ROLES = ['RECEPTION', 'TRAINER'] as const;
+const STAFF_ROLES: Exclude<AdminRole, 'OWNER'>[] = [
+  'RECEPTION', 'TRAINER', 'MANAGER', 'ACCOUNTANT', 'HOUSEKEEPING', 'OTHER',
+];
 
 export default function TeamPage() {
   const { user, can } = useAuth();
@@ -25,10 +28,12 @@ export default function TeamPage() {
     name: '',
     email: '',
     password: '',
-    role: 'RECEPTION' as 'RECEPTION' | 'TRAINER',
+    role: 'RECEPTION' as Exclude<AdminRole, 'OWNER'>,
     jobTitle: '',
   });
   const [permOverrides, setPermOverrides] = useState<Partial<AdminPermissions>>({});
+  const [otpInfo, setOtpInfo] = useState<{ name: string; email: string; code: string; expiresInMinutes: number } | null>(null);
+  const [otpLoadingId, setOtpLoadingId] = useState<string | null>(null);
 
   const load = () => {
     setLoading(true);
@@ -60,7 +65,7 @@ export default function TeamPage() {
       name: u.name,
       email: u.email,
       password: '',
-      role: u.role as 'RECEPTION' | 'TRAINER',
+      role: u.role as Exclude<AdminRole, 'OWNER'>,
       jobTitle: u.jobTitle || '',
     });
     setPermOverrides(u.permissions);
@@ -99,6 +104,18 @@ export default function TeamPage() {
     load();
   };
 
+  const handleResetCode = async (u: AdminTeamUser) => {
+    setOtpLoadingId(u.id);
+    try {
+      const res = await teamApi.generateResetOtp(u.id);
+      setOtpInfo({ name: u.name, email: res.email, code: res.code, expiresInMinutes: res.expiresInMinutes });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Could not generate reset code');
+    } finally {
+      setOtpLoadingId(null);
+    }
+  };
+
   const setPerm = (mod: AdminModule, level: PermissionLevel) => {
     setPermOverrides(prev => ({ ...prev, [mod]: level }));
   };
@@ -112,7 +129,7 @@ export default function TeamPage() {
           <h1 className="text-xl font-bold flex items-center gap-2">
             <Shield size={20} className="text-orange-500" /> Team & access
           </h1>
-          <p className="text-sm text-zinc-500">Create staff logins and control what each person can see or edit.</p>
+          <p className="text-sm text-zinc-500">Create staff logins and control what each person can see or edit. Staff can change their own password from Profile, or you can send a 6-digit reset code.</p>
         </div>
         {can('team', 'write') && (
           <button type="button" onClick={openAdd} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-orange-600 text-black text-sm font-semibold">
@@ -134,7 +151,17 @@ export default function TeamPage() {
                   {ROLE_LABELS[u.role]} {u.jobTitle ? `· ${u.jobTitle}` : ''}
                 </p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
+                {can('team', 'write') && (
+                  <button
+                    type="button"
+                    onClick={() => handleResetCode(u)}
+                    disabled={otpLoadingId === u.id}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-zinc-800 text-xs"
+                  >
+                    <KeyRound size={12} /> {otpLoadingId === u.id ? 'Generating…' : 'Reset code'}
+                  </button>
+                )}
                 {u.role !== 'OWNER' && can('team', 'write') && (
                   <>
                     <button type="button" onClick={() => openEdit(u)} className="px-3 py-1.5 rounded-lg bg-zinc-800 text-xs">Edit access</button>
@@ -164,10 +191,10 @@ export default function TeamPage() {
             <input required type="email" placeholder="Email (login)" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
             <input required={!editing} type="password" placeholder={editing ? 'New password (leave blank to keep)' : 'Password (min 6 chars)'} value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
 
-            <select value={form.role} onChange={e => { setForm({ ...form, role: e.target.value as 'RECEPTION' | 'TRAINER' }); setPermOverrides({}); }} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm">
+            <select value={form.role} onChange={e => { setForm({ ...form, role: e.target.value as Exclude<AdminRole, 'OWNER'> }); setPermOverrides({}); }} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm">
               {STAFF_ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
             </select>
-            <input placeholder="Job title (e.g. Front desk, Coach)" value={form.jobTitle} onChange={e => setForm({ ...form, jobTitle: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
+            <input placeholder="Job title (e.g. Front desk, Coach, Cleaner)" value={form.jobTitle} onChange={e => setForm({ ...form, jobTitle: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
 
             <div>
               <p className="text-xs font-semibold text-zinc-400 mb-2 uppercase">Feature access</p>
@@ -194,6 +221,21 @@ export default function TeamPage() {
               {editing ? 'Save changes' : 'Create login'}
             </button>
           </form>
+        </div>
+      )}
+
+      {otpInfo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/70" onClick={() => setOtpInfo(null)} />
+          <div className="relative bg-zinc-900 border border-zinc-800 rounded-xl p-5 w-full max-w-md space-y-3">
+            <h3 className="font-semibold">Password reset code</h3>
+            <p className="text-sm text-zinc-400">
+              Share this 6-digit code with <span className="text-white">{otpInfo.name}</span> ({otpInfo.email}). They enter it on Admin sign in → Forgot password.
+            </p>
+            <p className="text-3xl font-mono tracking-[0.3em] text-center text-orange-400 py-3">{otpInfo.code}</p>
+            <p className="text-xs text-zinc-500 text-center">Expires in {otpInfo.expiresInMinutes} minutes. Shown once.</p>
+            <button type="button" onClick={() => setOtpInfo(null)} className="w-full py-2.5 rounded-lg bg-zinc-800 text-sm">Done</button>
+          </div>
         </div>
       )}
     </div>

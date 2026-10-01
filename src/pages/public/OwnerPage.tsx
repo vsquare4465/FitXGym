@@ -7,8 +7,8 @@ import { useIsCompactPreview } from '../../context/PreviewViewportContext';
 import ImageFrame3D from '../../components/public/ImageFrame3D';
 import ScrollReveal3D from '../../components/public/ScrollReveal3D';
 import { parseFeatureList } from '../../lib/parseFeatures';
+import { dedicatedImage } from '../../lib/siteImages';
 import { grid1Or2, sectionPadding } from '../../lib/previewLayoutClasses';
-import { firstRealImage } from '../../lib/siteImages';
 
 interface OwnerPageProps {
   previewSettings?: Record<string, string>;
@@ -29,7 +29,7 @@ export default function OwnerPage({ previewSettings, previewMode = false }: Owne
 
   const name = settings.ownerName || 'Deepak Solanki';
   const title = settings.ownerTitle || 'Founder & Head Coach';
-  const photo = firstRealImage(settings.ownerPhoto);
+  const photo = dedicatedImage(settings.ownerPhoto);
   const bio = settings.ownerPageBio || settings.ownerBio || 'Passionate about helping Khurja train smarter, eat better, and stay consistent for life.';
   const gymName = settings.gymName || 'Fit X Gym';
 

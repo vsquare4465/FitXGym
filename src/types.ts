@@ -228,7 +228,7 @@ export interface AdminTeamUser {
   id: string;
   name: string;
   email: string;
-  role: 'OWNER' | 'RECEPTION' | 'TRAINER';
+  role: 'OWNER' | 'RECEPTION' | 'TRAINER' | 'MANAGER' | 'ACCOUNTANT' | 'HOUSEKEEPING' | 'OTHER';
   jobTitle?: string | null;
   permissions: AdminPermissionsMap;
   createdAt: string;

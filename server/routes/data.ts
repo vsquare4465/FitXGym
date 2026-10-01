@@ -5,6 +5,9 @@ import { authMiddleware, requireAdmin, requirePermission } from '../middleware/a
 import { isPaymentExempt } from '../lib/permissions.js';
 import { toClientMember } from '../lib/memberMapper.js';
 import { buildDashboard, getMemberProfile } from '../lib/dashboardStats.js';
+import { nextMemberId } from '../lib/memberId.js';
+import { isValidEmail, isValidIndianPhone } from '../lib/validation.js';
+import { normalizeWhatsAppNumber } from '../lib/whatsapp.js';
 import { daysUntil } from '../lib/dateRange.js';
 
 const router = Router();
@@ -17,10 +20,6 @@ function formatAuditTime() {
 
 async function addLog(message: string) {
   await prisma.auditLog.create({ data: { message: `[${formatAuditTime()}] ${message}` } });
-}
-
-function nextMemberId(): string {
-  return `MEM-${Math.floor(1000 + Math.random() * 9000)}`;
 }
 
 function addMonths(dateStr: string, months: number): string {
@@ -63,7 +62,14 @@ router.get('/members/:id/profile', requirePermission('members', 'read'), async (
 
 router.post('/members', requirePermission('members', 'write'), async (req, res) => {
   const body = req.body;
-  const id = body.id || nextMemberId();
+  if (!body.name?.trim()) return res.status(400).json({ error: 'Name is required' });
+  if (!isValidEmail(String(body.email || ''))) {
+    return res.status(400).json({ error: 'Enter a valid email address' });
+  }
+  if (!isValidIndianPhone(String(body.phone || ''))) {
+    return res.status(400).json({ error: 'Enter a valid 10-digit Indian mobile number' });
+  }
+  const id = await nextMemberId();
   const password = body.password || '123456';
   const passwordHash = await bcrypt.hash(password, 10);
   const joinDate = body.joinDate || new Date().toISOString().split('T')[0];
@@ -150,6 +156,12 @@ router.post('/members', requirePermission('members', 'write'), async (req, res) 
 router.put('/members/:id', requirePermission('members', 'write'), async (req, res) => {
   const { id } = req.params;
   const body = req.body;
+  if (body.email !== undefined && !isValidEmail(String(body.email || ''))) {
+    return res.status(400).json({ error: 'Enter a valid email address' });
+  }
+  if (body.phone !== undefined && !isValidIndianPhone(String(body.phone || ''))) {
+    return res.status(400).json({ error: 'Enter a valid 10-digit Indian mobile number' });
+  }
   const updated = await prisma.member.update({
     where: { id },
     data: {
@@ -421,7 +433,7 @@ router.post('/leads/:id/convert', requirePermission('leads', 'write'), async (re
 
   const planId = req.body.planId || 'plan_monthly';
   const plan = await prisma.plan.findUnique({ where: { id: planId } });
-  const id = nextMemberId();
+  const id = await nextMemberId();
   const joinDate = new Date().toISOString().split('T')[0];
   const months = plan ? planDurationMonths(plan.duration) : 1;
   const expiryDate = addMonths(joinDate, months);
@@ -522,8 +534,10 @@ router.get('/settings', requirePermission('dashboard', 'read'), async (_req, res
 router.put('/settings', requirePermission('website', 'write'), async (req, res) => {
   const settings = req.body as Record<string, string>;
   for (const [key, value] of Object.entries(settings)) {
+    let stored = value;
+    if (key === 'whatsapp') stored = normalizeWhatsAppNumber(value);
     await prisma.websiteSetting.upsert({
-      where: { key }, create: { key, value }, update: { value },
+      where: { key }, create: { key, value: stored }, update: { value: stored },
     });
   }
   await addLog('WEBSITE: Updated site content');

@@ -58,7 +58,7 @@ export default function ProfilePage() {
     <div className="p-4 md:p-6 max-w-2xl mx-auto pb-8">
       <h1 className="text-xl font-bold mb-1">My profile</h1>
       <p className="text-sm text-zinc-500 mb-6">
-        {ROLE_LABELS[admin.adminRole]} {admin.jobTitle ? `· ${admin.jobTitle}` : ''}
+        {ROLE_LABELS[admin.adminRole]} {admin.jobTitle ? `· ${admin.jobTitle}` : ''} — update your details and password here. If you forget it, ask an owner to generate a reset code from Team.
       </p>
 
       <form onSubmit={handleProfileSave} className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-5 space-y-4 mb-6">

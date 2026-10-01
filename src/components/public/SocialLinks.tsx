@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { normalizeWhatsAppNumber, whatsappUrl } from '../../lib/whatsapp';
 
 interface Props {
   whatsapp?: string;
@@ -27,8 +28,8 @@ function IconButton({ href, label, children, size }: { href: string; label: stri
 
 export default function SocialLinks({ whatsapp, instagram, facebook, email, size = 'md', className = '' }: Props) {
   const links = [
-    whatsapp && {
-      href: `https://wa.me/${whatsapp.replace(/\D/g, '')}`,
+    whatsapp && normalizeWhatsAppNumber(whatsapp) && {
+      href: whatsappUrl(whatsapp),
       label: 'WhatsApp',
       icon: (
         <svg viewBox="0 0 24 24" fill="currentColor" className="w-full h-full text-emerald-400">
