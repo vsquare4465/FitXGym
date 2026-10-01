@@ -8,6 +8,12 @@
 
 html {
   scroll-behavior: smooth;
+  overflow-x: hidden;
+}
+
+section[id],
+#enquiry {
+  scroll-margin-top: 5.75rem;
 }
 
 body {

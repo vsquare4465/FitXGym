@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, Outlet } from 'react-router-dom';
+import { Link, Outlet, useLocation } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 import { publicApi } from '../api/client';
 import BrandLogo from '../components/public/BrandLogo';
@@ -16,17 +16,27 @@ export default function PublicLayout() {
       .catch(() => setApiError(true));
   }, []);
 
+  const location = useLocation();
   const gymName = settings.gymName || 'Fit X Gym';
   const whatsapp = settings.whatsapp || '919760260553';
   const showPt = settings.ptEnabled !== 'false';
 
+  useEffect(() => {
+    if (!location.hash) return;
+    const id = decodeURIComponent(location.hash.slice(1));
+    const timer = window.setTimeout(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [location.pathname, location.hash]);
+
   const nav = [
-    { href: '#about', label: 'About' },
+    { href: '/#about', label: 'About' },
     { href: '/owner', label: 'Coach', isRoute: true },
-    { href: '#plans', label: 'Plans' },
-    ...(showPt ? [{ href: '#training', label: 'Training' }] : []),
-    { href: '#gallery', label: 'Gallery' },
-    { href: '#contact', label: 'Contact' },
+    { href: '/#plans', label: 'Plans' },
+    ...(showPt ? [{ href: '/#training', label: 'Training' }] : []),
+    { href: '/#gallery', label: 'Gallery' },
+    { href: '/#enquiry', label: 'Contact' },
   ];
 
   return (
@@ -62,7 +72,7 @@ export default function PublicLayout() {
                 ? <Link key={n.href} to={n.href} onClick={() => setMenuOpen(false)} className="block py-2 text-sm text-zinc-300">{n.label}</Link>
                 : <a key={n.href} href={n.href} onClick={() => setMenuOpen(false)} className="block py-2 text-sm text-zinc-300">{n.label}</a>
             ))}
-            <a href="#contact" onClick={() => setMenuOpen(false)} className="block py-2 text-sm text-orange-500 font-medium">Enquire</a>
+            <a href="/#enquiry" onClick={() => setMenuOpen(false)} className="block py-2 text-sm text-orange-500 font-medium">Enquire</a>
           </div>
         )}
       </header>
@@ -100,7 +110,7 @@ export default function PublicLayout() {
                 <li><Link to="/legal/privacy" className="hover:text-white">Privacy Policy</Link></li>
                 <li><Link to="/legal/terms" className="hover:text-white">Terms &amp; Conditions</Link></li>
                 <li><Link to="/legal/refund" className="hover:text-white">Refund Policy</Link></li>
-                <li><a href="/#contact" className="hover:text-white">Contact Us</a></li>
+                <li><a href="/#enquiry" className="hover:text-white">Contact Us</a></li>
               </ul>
             </div>
 

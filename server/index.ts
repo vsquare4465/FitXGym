@@ -20,6 +20,7 @@ import memberRoutes from './routes/member.js';
 
 import { prisma } from './db.js';
 import { distPath, getAllowedOrigins, isProd, port, validateProductionEnv } from './lib/config.js';
+import { ensureProductionOwners } from './lib/ensureOwner.js';
 
 
 
@@ -153,6 +154,9 @@ const server = app.listen(port, '0.0.0.0', () => {
   console.log(`Fit X Gym ${isProd ? 'production' : 'API'} server on http://0.0.0.0:${port}`);
   if (isProd) {
     console.log('Serving website + API from single process');
+    ensureProductionOwners().catch(err => {
+      console.error('Failed to ensure owner accounts:', err);
+    });
   } else {
     console.log(`API health: http://localhost:${port}/api/health`);
   }
