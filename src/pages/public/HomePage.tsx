@@ -19,6 +19,7 @@ import SectionHeading3D from '../../components/public/SectionHeading3D';
 import TiltCard from '../../components/public/TiltCard';
 import { useIsCompactPreview } from '../../context/PreviewViewportContext';
 import { dedupeGalleryByUrl } from '../../lib/galleryUtils';
+import { firstRealImage } from '../../lib/siteImages';
 import { grid1Or2, grid1Or2Or3, grid1Or2Or4, grid1Or3, sectionPadding } from '../../lib/previewLayoutClasses';
 
 const ENQUIRY_SUBJECTS = [
@@ -82,7 +83,21 @@ export default function HomePage({
   }, [settings, previewMode]);
 
   const gymName = settings.gymName || 'Fit X Gym';
-  const heroImage = settings.heroImage || 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=1600&q=80';
+  const uniqueGallery = dedupeGalleryByUrl(gallery);
+  const featuredGallery = uniqueGallery.filter(g => g.featured).length
+    ? uniqueGallery.filter(g => g.featured)
+    : uniqueGallery;
+  const gymPhoto = firstRealImage(
+    settings.aboutImage,
+    settings.ownerPhoto,
+    featuredGallery[0]?.url,
+    uniqueGallery[0]?.url,
+    settings.logoUrl,
+  );
+  const heroImage = firstRealImage(settings.heroImage, gymPhoto)
+    || 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=1600&q=80';
+  const aboutImage = firstRealImage(settings.aboutImage, settings.ownerPhoto, gymPhoto, heroImage);
+  const ptImageSrc = firstRealImage(settings.ptImage, gymPhoto, aboutImage);
   const whatsapp = settings.whatsapp || '919760260553';
   const heroHeading = settings.heroHeading || 'Your neighborhood gym in Khurja';
   const heroDesc = settings.heroDescription || 'Strength training, cardio, and friendly guidance — whether you\'re just starting or already consistent.';
@@ -93,10 +108,6 @@ export default function HomePage({
 
   const membershipPlans = plans.filter(p => p.active !== false && p.id !== 'plan_pt');
   const ptPlan = plans.find(p => p.id === 'plan_pt' && p.active !== false);
-  const uniqueGallery = dedupeGalleryByUrl(gallery);
-  const featuredGallery = uniqueGallery.filter(g => g.featured).length
-    ? uniqueGallery.filter(g => g.featured)
-    : uniqueGallery;
 
   const handleLead = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -216,10 +227,12 @@ export default function HomePage({
             </div>
             </ScrollReveal3D>
             <ScrollReveal3D delay={0.08}>
+              {aboutImage && (
               <ImageFrame3D
-                src={settings.aboutImage || settings.ownerPhoto || gallery[0]?.url || heroImage}
-                alt="About gym"
+                src={aboutImage}
+                alt={`${gymName} gym floor`}
               />
+              )}
             </ScrollReveal3D>
           </div>
 
@@ -296,12 +309,14 @@ export default function HomePage({
               </a>
             </div>
             </ScrollReveal3D>
+            {ptImageSrc && (
             <ScrollReveal3D delay={0.1} className={compact ? 'order-1' : 'order-1 lg:order-2'}>
               <ImageFrame3D
-                src={settings.ptImage || 'https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?w=800&auto=format&fit=crop&q=80'}
+                src={ptImageSrc}
                 alt="Personal training"
               />
             </ScrollReveal3D>
+            )}
           </div>
         </section>
       )}

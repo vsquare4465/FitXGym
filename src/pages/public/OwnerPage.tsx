@@ -8,6 +8,7 @@ import ImageFrame3D from '../../components/public/ImageFrame3D';
 import ScrollReveal3D from '../../components/public/ScrollReveal3D';
 import { parseFeatureList } from '../../lib/parseFeatures';
 import { grid1Or2, sectionPadding } from '../../lib/previewLayoutClasses';
+import { firstRealImage } from '../../lib/siteImages';
 
 interface OwnerPageProps {
   previewSettings?: Record<string, string>;
@@ -28,7 +29,7 @@ export default function OwnerPage({ previewSettings, previewMode = false }: Owne
 
   const name = settings.ownerName || 'Deepak Solanki';
   const title = settings.ownerTitle || 'Founder & Head Coach';
-  const photo = settings.ownerPhoto || settings.aboutImage;
+  const photo = firstRealImage(settings.ownerPhoto, settings.aboutImage);
   const bio = settings.ownerPageBio || settings.ownerBio || 'Passionate about helping Khurja train smarter, eat better, and stay consistent for life.';
   const gymName = settings.gymName || 'Fit X Gym';
 
@@ -62,13 +63,19 @@ export default function OwnerPage({ previewSettings, previewMode = false }: Owne
           </Link>
 
           <div className={`${compact ? 'grid grid-cols-1 gap-8' : 'grid lg:grid-cols-[280px_1fr] gap-10'} items-start`}>
-            {photo && (
-              <ScrollReveal3D className={`mx-auto w-full max-w-[280px] ${compact ? '' : 'lg:mx-0'}`}>
+            <ScrollReveal3D className={`mx-auto w-full max-w-[280px] ${compact ? '' : 'lg:mx-0'}`}>
+              {photo ? (
                 <div className="[&_.image-frame-3d>div:last-child]:aspect-[3/4]">
                   <ImageFrame3D src={photo} alt={name} />
                 </div>
-              </ScrollReveal3D>
-            )}
+              ) : (
+                <div className="aspect-[3/4] rounded-2xl border border-zinc-700/80 bg-gradient-to-br from-orange-600/30 to-zinc-900 flex items-center justify-center">
+                  <span className="text-5xl font-bold text-orange-400 tracking-wide">
+                    {name.split(' ').map(p => p[0]).slice(0, 2).join('')}
+                  </span>
+                </div>
+              )}
+            </ScrollReveal3D>
 
             <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
               <p className="text-orange-500 text-sm font-semibold mb-2">Meet your coach</p>

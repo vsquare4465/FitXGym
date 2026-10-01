@@ -287,10 +287,14 @@ async function main() {
   };
 
   for (const [key, value] of Object.entries(defaultSettings)) {
+    // Do not write Unsplash placeholders into a live gym database.
+    if (isProd && /unsplash\.com/i.test(value)) continue;
     const existing = await prisma.websiteSetting.findUnique({ where: { key } });
     if (!existing) {
       await prisma.websiteSetting.create({ data: { key, value } });
     } else if (!isProd) {
+      await prisma.websiteSetting.update({ where: { key }, data: { value } });
+    } else if (/unsplash\.com/i.test(existing.value) && !/unsplash\.com/i.test(value)) {
       await prisma.websiteSetting.update({ where: { key }, data: { value } });
     }
   }
