@@ -87,17 +87,16 @@ export default function HomePage({
   const featuredGallery = uniqueGallery.filter(g => g.featured).length
     ? uniqueGallery.filter(g => g.featured)
     : uniqueGallery;
-  const gymPhoto = firstRealImage(
+  // Gym-floor photos only — never reuse the owner portrait as hero / about / PT.
+  const gymFloorPhoto = firstRealImage(
     settings.aboutImage,
-    settings.ownerPhoto,
     featuredGallery[0]?.url,
     uniqueGallery[0]?.url,
-    settings.logoUrl,
   );
-  const heroImage = firstRealImage(settings.heroImage, gymPhoto)
+  const heroImage = firstRealImage(settings.heroImage, gymFloorPhoto)
     || 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=1600&q=80';
-  const aboutImage = firstRealImage(settings.aboutImage, settings.ownerPhoto, gymPhoto, heroImage);
-  const ptImageSrc = firstRealImage(settings.ptImage, gymPhoto, aboutImage);
+  const aboutImage = firstRealImage(settings.aboutImage, gymFloorPhoto);
+  const ptImageSrc = firstRealImage(settings.ptImage, gymFloorPhoto);
   const whatsapp = settings.whatsapp || '919760260553';
   const heroHeading = settings.heroHeading || 'Your neighborhood gym in Khurja';
   const heroDesc = settings.heroDescription || 'Strength training, cardio, and friendly guidance — whether you\'re just starting or already consistent.';

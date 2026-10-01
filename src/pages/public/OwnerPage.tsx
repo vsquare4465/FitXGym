@@ -29,7 +29,7 @@ export default function OwnerPage({ previewSettings, previewMode = false }: Owne
 
   const name = settings.ownerName || 'Deepak Solanki';
   const title = settings.ownerTitle || 'Founder & Head Coach';
-  const photo = firstRealImage(settings.ownerPhoto, settings.aboutImage);
+  const photo = firstRealImage(settings.ownerPhoto);
   const bio = settings.ownerPageBio || settings.ownerBio || 'Passionate about helping Khurja train smarter, eat better, and stay consistent for life.';
   const gymName = settings.gymName || 'Fit X Gym';
 
