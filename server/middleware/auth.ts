@@ -15,6 +15,7 @@ export interface AuthUser {
   id: string;
   email: string;
   name: string;
+  phone?: string | null;
   role: 'OWNER' | 'RECEPTION' | 'TRAINER' | 'MANAGER' | 'ACCOUNTANT' | 'HOUSEKEEPING' | 'OTHER' | 'MEMBER';
   memberId?: string | null;
   jobTitle?: string | null;
@@ -49,6 +50,7 @@ async function buildAuthUser(user: {
   id: string;
   email: string;
   name: string;
+  phone?: string | null;
   role: string;
   memberId: string | null;
   jobTitle: string | null;
@@ -61,6 +63,7 @@ async function buildAuthUser(user: {
     id: user.id,
     email: user.email,
     name: user.name,
+    phone: user.phone ?? null,
     role: user.role as AuthUser['role'],
     memberId: user.memberId,
     jobTitle: user.jobTitle,

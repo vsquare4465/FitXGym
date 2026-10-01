@@ -67,7 +67,13 @@ router.post('/testimonials', formLimiter, async (req, res) => {
 
 router.post('/leads', formLimiter, async (req, res) => {
   const { name, phone, whatsapp, email, message, interestedPlan, subject, source } = req.body;
-  if (!name || !phone) return res.status(400).json({ error: 'Name and phone required' });
+  if (!name?.trim()) return res.status(400).json({ error: 'Name is required' });
+  if (!isValidIndianPhone(String(phone || ''))) {
+    return res.status(400).json({ error: 'Enter a valid 10-digit Indian mobile number' });
+  }
+  if (email && String(email).trim() && !isValidEmail(String(email))) {
+    return res.status(400).json({ error: 'Enter a valid email address' });
+  }
   const lead = await prisma.lead.create({
     data: {
       name,

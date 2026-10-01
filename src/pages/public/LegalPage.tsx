@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { publicApi } from '../../api/client';
+import { jumpToId } from '../../lib/scroll';
 
 const PAGES: Record<string, { title: string; settingKey: string; fallback: string }> = {
   privacy: {
@@ -29,12 +30,21 @@ export default function LegalPage() {
 
   useEffect(() => {
     if (!meta) return;
+    let cancelled = false;
     publicApi.settings().then(s => {
+      if (cancelled) return;
       setGymName(s.gymName || 'Fit X Gym');
       setContent(s[meta.settingKey] || meta.fallback);
       document.title = `${meta.title} | ${s.gymName || 'Fit X Gym'}`;
     });
+    return () => { cancelled = true; };
   }, [meta]);
+
+  useLayoutEffect(() => {
+    jumpToId('legal-content', true);
+    const timer = window.setTimeout(() => jumpToId('legal-content', true), 120);
+    return () => window.clearTimeout(timer);
+  }, [page, content]);
 
   if (!meta) {
     return (
@@ -50,12 +60,16 @@ export default function LegalPage() {
       <Link to="/" className="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-white mb-8">
         <ArrowLeft size={16} /> Back to {gymName}
       </Link>
-      <h1 className="text-3xl font-bold mb-6">{meta.title}</h1>
-      <div className="prose prose-invert prose-sm max-w-none text-zinc-300 leading-relaxed whitespace-pre-wrap">
-        {content}
-      </div>
+      <article id="legal-content" tabIndex={-1} className="outline-none scroll-mt-24">
+        <h1 className="text-3xl font-bold mb-6">
+          {meta.title}
+        </h1>
+        <div className="prose prose-invert prose-sm max-w-none text-zinc-300 leading-relaxed whitespace-pre-wrap">
+          {content}
+        </div>
+      </article>
       <p className="mt-10 pt-6 border-t border-zinc-800 text-sm text-zinc-500">
-        Questions? <Link to="/#contact" className="text-orange-500 hover:text-orange-400">Contact us</Link>
+        Questions? <Link to={{ pathname: '/', hash: '#contact' }} className="text-orange-500 hover:text-orange-400">Contact us</Link>
       </p>
     </div>
   );

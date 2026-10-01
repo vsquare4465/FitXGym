@@ -276,6 +276,7 @@ router.delete('/members/:id', requirePermission('members', 'write'), async (req,
   const { id } = req.params;
   const m = await prisma.member.findUnique({ where: { id } });
   if (!m) return res.status(404).json({ error: 'Not found' });
+  await prisma.user.deleteMany({ where: { memberId: id } });
   await prisma.member.delete({ where: { id } });
   await addLog(`DELETION: ${m.name} (${id}) removed`);
   res.json({ ok: true });

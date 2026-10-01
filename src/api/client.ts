@@ -69,6 +69,7 @@ export const authApi = {
         name: string;
         email: string;
         adminRole: AdminRole;
+        phone?: string | null;
         jobTitle?: string | null;
         permissions: AdminPermissions;
       };
@@ -83,18 +84,24 @@ export const authApi = {
     }),
   me: () => api<{
     user:
-      | { role: 'admin'; name: string; email: string; adminRole: AdminRole; jobTitle?: string | null; permissions: AdminPermissions }
+      | { role: 'admin'; id: string; name: string; email: string; adminRole: AdminRole; phone?: string | null; jobTitle?: string | null; permissions: AdminPermissions }
       | { role: 'member'; name: string; email: string; memberId: string };
   }>('/auth/me', { auth: true }),
-  updateProfile: (data: { name?: string; email?: string }) =>
-    api<{ user: { role: 'admin'; name: string; email: string; adminRole: AdminRole; jobTitle?: string | null; permissions: AdminPermissions } }>(
+  updateProfile: (data: { name?: string; email?: string; phone?: string }) =>
+    api<{ user: { role: 'admin'; name: string; email: string; adminRole: AdminRole; phone?: string | null; jobTitle?: string | null; permissions: AdminPermissions } }>(
       '/auth/me',
       { method: 'PUT', auth: true, body: JSON.stringify(data) },
     ),
   changePassword: (currentPassword: string, newPassword: string) =>
     api('/auth/password', { method: 'PUT', auth: true, body: JSON.stringify({ currentPassword, newPassword }) }),
-  resetPassword: (email: string, otp: string, newPassword: string) =>
-    api('/auth/reset-password', { method: 'POST', body: JSON.stringify({ email, otp, newPassword }) }),
+  requestOtp: (emailOrPhone: string) =>
+    api<{ ok: boolean; message: string; expiresInMinutes: number }>('/auth/request-otp', {
+      method: 'POST',
+      auth: false,
+      body: JSON.stringify({ emailOrPhone }),
+    }),
+  resetPassword: (emailOrPhone: string, otp: string, newPassword: string) =>
+    api('/auth/reset-password', { method: 'POST', auth: false, body: JSON.stringify({ emailOrPhone, otp, newPassword }) }),
   logout: () => api('/auth/logout', { method: 'POST', auth: true }),
 };
 
@@ -106,19 +113,21 @@ export const teamApi = {
     password: string;
     role: Exclude<AdminRole, 'OWNER'>;
     jobTitle?: string;
+    phone?: string;
     permissions?: Partial<AdminPermissionsMap>;
   }) => api<AdminTeamUser>('/team', { method: 'POST', auth: true, body: JSON.stringify(data) }),
   update: (id: string, data: Partial<{
     name: string;
     email: string;
     password: string;
-    role: Exclude<AdminRole, 'OWNER'>;
+    role: AdminRole;
     jobTitle: string;
+    phone: string;
     permissions: Partial<AdminPermissionsMap>;
   }>) => api<AdminTeamUser>(`/team/${id}`, { method: 'PUT', auth: true, body: JSON.stringify(data) }),
   remove: (id: string) => api(`/team/${id}`, { method: 'DELETE', auth: true }),
   generateResetOtp: (id: string) =>
-    api<{ email: string; code: string; expiresInMinutes: number }>(`/team/${id}/reset-otp`, { method: 'POST', auth: true }),
+    api<{ email: string; phone?: string | null; code: string; expiresInMinutes: number }>(`/team/${id}/reset-otp`, { method: 'POST', auth: true }),
 };
 
 function dashboardQuery(period: string, from?: string, to?: string) {

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Search, Plus, MessageCircle, Eye } from 'lucide-react';
+import { Search, Plus, MessageCircle, Eye, Trash2 } from 'lucide-react';
 import { useGymData } from '../../context/GymDataProvider';
 import { Member, MembershipType, Payment, Plan } from '../../types';
 import { useAuth } from '../../context/AuthContext';
@@ -80,10 +80,15 @@ export default function MembersPage() {
     }
   };
 
-  const handleDeactivate = async (id: string) => {
-    if (!confirm('Deactivate this member?')) return;
-    await adminApi.deactivateMember(id);
-    refresh();
+  const handleDelete = async (id: string, name: string) => {
+    if (!confirm(`Permanently delete ${name}? This removes their membership, payments, and attendance.`)) return;
+    try {
+      await adminApi.deleteMember(id);
+      if (selectedId === id) setSelectedId(null);
+      refresh();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Could not delete member');
+    }
   };
 
   const gymName = settings.gymName || 'Fit X Gym';
@@ -152,6 +157,11 @@ export default function MembersPage() {
               >
                 <MessageCircle size={16} />
               </button>
+              {can('members', 'write') && (
+                <button type="button" onClick={() => handleDelete(member.id, member.name)} className="p-2 rounded-lg bg-red-500/10 text-red-400">
+                  <Trash2 size={16} />
+                </button>
+              )}
             </div>
           </div>
         ))}
@@ -182,7 +192,9 @@ export default function MembersPage() {
                 <td className="p-3">
                   <div className="flex justify-end gap-2">
                     <button type="button" onClick={() => setSelectedId(member.id)} className="px-2 py-1 rounded bg-zinc-800 text-xs">View</button>
-                    <button type="button" onClick={() => handleDeactivate(member.id)} className="px-2 py-1 rounded bg-zinc-800 text-xs text-red-400">Deactivate</button>
+                    {can('members', 'write') && (
+                      <button type="button" onClick={() => handleDelete(member.id, member.name)} className="px-2 py-1 rounded bg-red-500/10 text-xs text-red-400">Delete</button>
+                    )}
                   </div>
                 </td>
               </tr>

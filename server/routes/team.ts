@@ -5,6 +5,8 @@ import { authMiddleware, requireAdmin, requirePermission } from '../middleware/a
 import { UserRole } from '@prisma/client';
 import { AdminPermissions, isAdminRole, resolvePermissions } from '../lib/permissions.js';
 import { createPasswordOtp, OTP_EXPIRES_MINUTES } from '../lib/passwordOtp.js';
+import { normalizeStaffPhone } from '../lib/validation.js';
+import { deliverPasswordOtp } from '../lib/otpDelivery.js';
 
 const router = Router();
 router.use(authMiddleware);
@@ -14,6 +16,7 @@ function toTeamUser(user: {
   id: string;
   name: string;
   email: string;
+  phone: string | null;
   role: string;
   jobTitle: string | null;
   permissions: unknown;
@@ -26,6 +29,7 @@ function toTeamUser(user: {
     id: user.id,
     name: user.name,
     email: user.email,
+    phone: user.phone,
     role: user.role,
     jobTitle: user.jobTitle,
     permissions: resolvePermissions(user.role, overrides),
@@ -42,12 +46,13 @@ router.get('/', requirePermission('team', 'read'), async (_req, res) => {
 });
 
 router.post('/', requirePermission('team', 'write'), async (req, res) => {
-  const { name, email, password, role, jobTitle, permissions } = req.body as {
+  const { name, email, password, role, jobTitle, phone, permissions } = req.body as {
     name?: string;
     email?: string;
     password?: string;
     role?: string;
     jobTitle?: string;
+    phone?: string;
     permissions?: Partial<AdminPermissions>;
   };
 
@@ -62,10 +67,17 @@ router.post('/', requirePermission('team', 'write'), async (req, res) => {
   const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
   if (existing) return res.status(400).json({ error: 'Email already registered' });
 
+  let storedPhone: string | null = null;
+  if (phone?.trim()) {
+    storedPhone = normalizeStaffPhone(phone);
+    if (!storedPhone) return res.status(400).json({ error: 'Enter a valid 10-digit Indian mobile number' });
+  }
+
   const created = await prisma.user.create({
     data: {
       name: name.trim(),
       email: normalizedEmail,
+      phone: storedPhone,
       passwordHash: await bcrypt.hash(password, 10),
       role: role as UserRole,
       jobTitle: jobTitle?.trim() || null,
@@ -82,12 +94,13 @@ router.post('/', requirePermission('team', 'write'), async (req, res) => {
 router.put('/:id', requirePermission('team', 'write'), async (req, res) => {
   const { id } = req.params;
   const actor = req.user!;
-  const { name, email, password, role, jobTitle, permissions } = req.body as {
+  const { name, email, password, role, jobTitle, phone, permissions } = req.body as {
     name?: string;
     email?: string;
     password?: string;
     role?: string;
     jobTitle?: string;
+    phone?: string;
     permissions?: Partial<AdminPermissions>;
   };
 
@@ -106,6 +119,7 @@ router.put('/:id', requirePermission('team', 'write'), async (req, res) => {
     passwordHash?: string;
     role?: UserRole;
     jobTitle?: string | null;
+    phone?: string | null;
     permissions?: Partial<AdminPermissions>;
   } = {};
 
@@ -122,6 +136,14 @@ router.put('/:id', requirePermission('team', 'write'), async (req, res) => {
     data.passwordHash = await bcrypt.hash(password, 10);
   }
   if (jobTitle !== undefined) data.jobTitle = jobTitle?.trim() || null;
+  if (phone !== undefined) {
+    if (!phone.trim()) data.phone = null;
+    else {
+      const normalized = normalizeStaffPhone(phone);
+      if (!normalized) return res.status(400).json({ error: 'Enter a valid 10-digit Indian mobile number' });
+      data.phone = normalized;
+    }
+  }
   if (permissions && typeof permissions === 'object') data.permissions = permissions;
 
   if (role && isAdminRole(role)) {
@@ -167,10 +189,16 @@ router.post('/:id/reset-otp', requirePermission('team', 'write'), async (req, re
     return res.status(404).json({ error: 'Team member not found' });
   }
   const code = await createPasswordOtp(target.email);
+  await deliverPasswordOtp({
+    name: target.name,
+    email: target.email,
+    phone: target.phone,
+    code,
+  });
   await prisma.auditLog.create({
     data: { message: `SECURITY: Password reset code generated for ${target.name}` },
   });
-  res.json({ email: target.email, code, expiresInMinutes: OTP_EXPIRES_MINUTES });
+  res.json({ email: target.email, phone: target.phone, code, expiresInMinutes: OTP_EXPIRES_MINUTES });
 });
 
 export default router;

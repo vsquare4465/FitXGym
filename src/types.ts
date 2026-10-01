@@ -228,6 +228,7 @@ export interface AdminTeamUser {
   id: string;
   name: string;
   email: string;
+  phone?: string | null;
   role: 'OWNER' | 'RECEPTION' | 'TRAINER' | 'MANAGER' | 'ACCOUNTANT' | 'HOUSEKEEPING' | 'OTHER';
   jobTitle?: string | null;
   permissions: AdminPermissionsMap;

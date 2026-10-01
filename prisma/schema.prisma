@@ -47,6 +47,7 @@ model User {
   email        String   @unique
   passwordHash String
   name         String
+  phone        String?
   role         UserRole @default(MEMBER)
   jobTitle     String?
   permissions  Json     @default("{}")

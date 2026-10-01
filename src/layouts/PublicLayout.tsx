@@ -4,6 +4,14 @@ import { Menu, X } from 'lucide-react';
 import { publicApi } from '../api/client';
 import BrandLogo from '../components/public/BrandLogo';
 import SocialLinks from '../components/public/SocialLinks';
+import { jumpToId, jumpToTop } from '../lib/scroll';
+
+type NavItem = {
+  href: string;
+  label: string;
+  hash?: string;
+  isRoute?: boolean;
+};
 
 export default function PublicLayout() {
   const [settings, setSettings] = useState<Record<string, string>>({});
@@ -20,24 +28,55 @@ export default function PublicLayout() {
   const gymName = settings.gymName || 'Fit X Gym';
   const whatsapp = settings.whatsapp || '919760260553';
   const showPt = settings.ptEnabled !== 'false';
+  const onHome = location.pathname === '/';
+  const currentHash = onHome ? location.hash : '';
+  const onLegal = location.pathname.startsWith('/legal');
 
   useEffect(() => {
-    if (!location.hash) return;
-    const id = decodeURIComponent(location.hash.slice(1));
-    const timer = window.setTimeout(() => {
-      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 80);
-    return () => window.clearTimeout(timer);
+    setMenuOpen(false);
   }, [location.pathname, location.hash]);
 
-  const nav = [
-    { href: '/#about', label: 'About' },
+  useEffect(() => {
+    if (onLegal) return undefined;
+    if (location.hash) {
+      const id = decodeURIComponent(location.hash.slice(1));
+      jumpToId(id);
+      const timers = [80, 250, 600].map(ms => window.setTimeout(() => jumpToId(id), ms));
+      return () => timers.forEach(t => window.clearTimeout(t));
+    }
+    jumpToTop();
+    return undefined;
+  }, [location.pathname, location.hash, onLegal]);
+
+  const nav: NavItem[] = [
+    { href: '/#about', hash: '#about', label: 'About' },
     { href: '/owner', label: 'Coach', isRoute: true },
-    { href: '/#plans', label: 'Plans' },
-    ...(showPt ? [{ href: '/#training', label: 'Training' }] : []),
-    { href: '/#gallery', label: 'Gallery' },
-    { href: '/#enquiry', label: 'Contact' },
+    { href: '/#plans', hash: '#plans', label: 'Plans' },
+    ...(showPt ? [{ href: '/#training', hash: '#training', label: 'Training' }] : []),
+    { href: '/#gallery', hash: '#gallery', label: 'Gallery' },
+    { href: '/#contact', hash: '#contact', label: 'Contact' },
   ];
+
+  const linkClass = (n: NavItem) => {
+    const active = n.isRoute
+      ? location.pathname === n.href
+      : onHome && !!n.hash && n.hash === currentHash;
+    return `transition-colors ${active ? 'text-white' : 'text-zinc-400 hover:text-white'}`;
+  };
+
+  const renderNavLink = (n: NavItem, extra = '') => (
+    n.isRoute
+      ? <Link key={n.href} to={n.href} className={`${extra} ${linkClass(n)}`}>{n.label}</Link>
+      : (
+        <Link
+          key={n.href}
+          to={{ pathname: '/', hash: n.hash }}
+          className={`${extra} ${linkClass(n)}`}
+        >
+          {n.label}
+        </Link>
+      )
+  );
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white">
@@ -52,12 +91,8 @@ export default function PublicLayout() {
             <BrandLogo src={settings.logoUrl} name={gymName} size="header" />
           </Link>
 
-          <nav className="hidden md:flex items-center gap-5 text-sm text-zinc-400">
-            {nav.map(n => (
-              'isRoute' in n && n.isRoute
-                ? <Link key={n.href} to={n.href} className="hover:text-white transition-colors">{n.label}</Link>
-                : <a key={n.href} href={n.href} className="hover:text-white transition-colors">{n.label}</a>
-            ))}
+          <nav className="hidden md:flex items-center gap-5 text-sm">
+            {nav.map(n => renderNavLink(n))}
           </nav>
 
           <button type="button" className="md:hidden p-2 text-zinc-400" onClick={() => setMenuOpen(!menuOpen)}>
@@ -67,12 +102,7 @@ export default function PublicLayout() {
 
         {menuOpen && (
           <div className="md:hidden border-t border-zinc-800 px-4 py-3 space-y-2 bg-zinc-950">
-            {nav.map(n => (
-              'isRoute' in n && n.isRoute
-                ? <Link key={n.href} to={n.href} onClick={() => setMenuOpen(false)} className="block py-2 text-sm text-zinc-300">{n.label}</Link>
-                : <a key={n.href} href={n.href} onClick={() => setMenuOpen(false)} className="block py-2 text-sm text-zinc-300">{n.label}</a>
-            ))}
-            <a href="/#enquiry" onClick={() => setMenuOpen(false)} className="block py-2 text-sm text-orange-500 font-medium">Enquire</a>
+            {nav.map(n => renderNavLink(n, 'block py-2 text-sm'))}
           </div>
         )}
       </header>
@@ -82,39 +112,33 @@ export default function PublicLayout() {
       <footer className="border-t border-white/5 bg-zinc-900/50">
         <div className="max-w-6xl mx-auto px-4 py-12">
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8 text-sm">
-            {/* Brand */}
             <div>
               <BrandLogo src={settings.logoUrl} name={gymName} size="footer" className="mb-3" />
               <p className="text-zinc-500 text-xs leading-relaxed mb-4">{settings.address}</p>
               <SocialLinks whatsapp={whatsapp} email={settings.email} instagram={settings.instagram} facebook={settings.facebook} size="sm" />
             </div>
 
-            {/* Quick links */}
             <div>
               <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-3">Quick links</p>
               <ul className="space-y-2 text-xs text-zinc-500">
                 {nav.map(n => (
-                  <li key={n.href}>
-                    {'isRoute' in n && n.isRoute
-                      ? <Link to={n.href} className="hover:text-white">{n.label}</Link>
-                      : <a href={n.href} className="hover:text-white">{n.label}</a>}
-                  </li>
+                  <li key={n.href}>{renderNavLink(n)}</li>
                 ))}
               </ul>
             </div>
 
-            {/* Legal */}
             <div>
               <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-3">Legal</p>
               <ul className="space-y-2 text-xs text-zinc-500">
                 <li><Link to="/legal/privacy" className="hover:text-white">Privacy Policy</Link></li>
                 <li><Link to="/legal/terms" className="hover:text-white">Terms &amp; Conditions</Link></li>
                 <li><Link to="/legal/refund" className="hover:text-white">Refund Policy</Link></li>
-                <li><a href="/#enquiry" className="hover:text-white">Contact Us</a></li>
+                <li>
+                  <Link to={{ pathname: '/', hash: '#contact' }} className="hover:text-white">Contact Us</Link>
+                </li>
               </ul>
             </div>
 
-            {/* Hours & phone */}
             <div>
               <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-3">Visit us</p>
               <p className="text-xs text-zinc-500 mb-1">{settings.phone}</p>

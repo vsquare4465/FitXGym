@@ -104,6 +104,14 @@ app.use('/api/member', memberRoutes);
 
 app.use('/api/team', teamRoutes);
 
+app.use('/api', (req, res, next) => {
+  const p = req.path;
+  if (p === '/auth' || p.startsWith('/auth/') || p.startsWith('/public') || p.startsWith('/member') || p.startsWith('/team')) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  next();
+});
+
 app.use('/api', dataRoutes);
 
 

@@ -9,3 +9,9 @@ export function isValidIndianPhone(phone: string): boolean {
   if (d.length === 12) return /^91[6-9]\d{9}$/.test(d);
   return false;
 }
+
+export function normalizeStaffPhone(phone?: string | null): string | null {
+  if (!phone?.trim()) return null;
+  if (!isValidIndianPhone(phone)) return null;
+  return phone.replace(/\D/g, '').slice(-10);
+}

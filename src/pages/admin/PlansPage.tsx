@@ -52,7 +52,7 @@ export default function PlansPage() {
                 {plan.description && <p className="text-xs text-zinc-400 mt-1">{plan.description}</p>}
                 <ul className="mt-2 space-y-1">
                   {plan.features.slice(0, 4).map(f => (
-                    <li key={f} className="text-xs text-zinc-400 flex gap-1"><Check size={12} className="text-orange-500 mt-0.5" />{f}</li>
+                    <li key={f} className="text-xs text-zinc-400 flex gap-1"><Check size={12} className="text-orange-500 mt-0.5 flex-shrink-0" />{f.replace(/^[\s✓✔☑✅●•\-–—*]+/, '')}</li>
                   ))}
                 </ul>
               </div>

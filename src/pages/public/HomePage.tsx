@@ -21,6 +21,7 @@ import { useIsCompactPreview } from '../../context/PreviewViewportContext';
 import { dedupeGalleryByUrl } from '../../lib/galleryUtils';
 import { whatsappUrl } from '../../lib/whatsapp';
 import { dedicatedImage } from '../../lib/siteImages';
+import { isValidEmail, phoneValidationMessage } from '../../lib/validation';
 import { grid1Or2, grid1Or2Or3, grid1Or2Or4, grid1Or3, sectionPadding } from '../../lib/previewLayoutClasses';
 
 const ENQUIRY_SUBJECTS = [
@@ -57,6 +58,7 @@ export default function HomePage({
   const [leadSubject, setLeadSubject] = useState('Membership Plan');
   const [leadMessage, setLeadMessage] = useState('');
   const [leadSent, setLeadSent] = useState(false);
+  const [leadError, setLeadError] = useState('');
 
   useEffect(() => {
     if (previewSettings) {
@@ -106,22 +108,36 @@ export default function HomePage({
   const handleLead = async (e: React.FormEvent) => {
     e.preventDefault();
     if (previewMode) return;
-    await publicApi.postLead({
-      name: leadName,
-      phone: leadPhone,
-      whatsapp: leadPhone,
-      email: leadEmail || undefined,
-      subject: leadSubject,
-      message: leadMessage,
-      source: 'Website Contact',
-    });
-    setLeadSent(true);
-    setLeadName('');
-    setLeadPhone('');
-    setLeadEmail('');
-    setLeadSubject('Membership Plan');
-    setLeadMessage('');
-    setTimeout(() => setLeadSent(false), 4000);
+    setLeadError('');
+    const phoneError = phoneValidationMessage(leadPhone);
+    if (phoneError) {
+      setLeadError(phoneError);
+      return;
+    }
+    if (leadEmail.trim() && !isValidEmail(leadEmail)) {
+      setLeadError('Enter a valid email address, or leave email blank.');
+      return;
+    }
+    try {
+      await publicApi.postLead({
+        name: leadName,
+        phone: leadPhone,
+        whatsapp: leadPhone,
+        email: leadEmail || undefined,
+        subject: leadSubject,
+        message: leadMessage,
+        source: 'Website Contact',
+      });
+      setLeadSent(true);
+      setLeadName('');
+      setLeadPhone('');
+      setLeadEmail('');
+      setLeadSubject('Membership Plan');
+      setLeadMessage('');
+      setTimeout(() => setLeadSent(false), 4000);
+    } catch (err) {
+      setLeadError(err instanceof Error ? err.message : 'Could not send enquiry');
+    }
   };
 
   const defaultAboutFeatures = [
@@ -194,7 +210,7 @@ export default function HomePage({
       </section>
 
       {/* About Us */}
-      <section id="about" className={`${sectionPadding(compact)} border-b border-white/5`}>
+      <section id="about" className={`${sectionPadding(compact)} border-b border-white/5 scroll-mt-20`}>
         <div className="max-w-6xl mx-auto">
           <div className={`${grid1Or2(compact)} gap-12 items-start`}>
             <ScrollReveal3D>
@@ -242,7 +258,7 @@ export default function HomePage({
             <div className={`${grid1Or2Or3(compact)} gap-4`} style={{ perspective: '1000px' }}>
               {features.map(f => (
                 <TiltCard key={f} className="flex gap-3 p-4 rounded-xl border border-zinc-800 bg-zinc-900/40">
-                  <span className="icon-badge-3d flex-shrink-0 mt-0.5">
+                  <span className="flex-shrink-0 mt-0.5">
                     <Check size={14} className="text-orange-500" />
                   </span>
                   <p className="text-sm text-zinc-300">{f}</p>
@@ -255,14 +271,14 @@ export default function HomePage({
       </section>
 
       {/* Membership Plans */}
-      <section id="plans" className={`${sectionPadding(compact)} bg-zinc-900/20`}>
+      <section id="plans" className={`${sectionPadding(compact)} bg-zinc-900/20 scroll-mt-20`}>
         <div className="max-w-6xl mx-auto">
           <SectionHeading3D
             eyebrow="Membership"
             title="Simple plans, no surprises"
             subtitle="Visit the gym to join · Pay at front desk"
           />
-          <div className={`${grid1Or2Or4(compact)} gap-5`} style={{ perspective: '1200px' }}>
+          <div className={`${grid1Or2Or4(compact)} gap-5 items-stretch`}>
             {membershipPlans.slice(0, 4).map((plan, i) => (
               <motion.div
                 key={plan.id}
@@ -280,7 +296,7 @@ export default function HomePage({
 
       {/* Personal Training */}
       {ptEnabled && (
-        <section id="training" className={`${sectionPadding(compact)} border-y border-white/5`}>
+        <section id="training" className={`${sectionPadding(compact)} border-y border-white/5 scroll-mt-20`}>
           <div className={`max-w-6xl mx-auto ${grid1Or2(compact)} gap-10 items-center`}>
             <ScrollReveal3D className={compact ? 'order-2' : 'order-2 lg:order-1'}>
             <div>
@@ -323,7 +339,7 @@ export default function HomePage({
 
       {/* Gallery */}
       {gallery.length > 0 && (
-        <section id="gallery" className={`${compact ? 'py-16 px-4' : 'py-16 md:py-20 px-4'} bg-zinc-900/20 overflow-hidden`}>
+        <section id="gallery" className={`${compact ? 'py-16 px-4' : 'py-16 md:py-20 px-4'} bg-zinc-900/20 overflow-hidden scroll-mt-20`}>
           <div className="max-w-6xl mx-auto">
             <SectionHeading3D
               eyebrow="Gallery"
@@ -355,7 +371,8 @@ export default function HomePage({
       )}
 
       {/* Contact — info + enquiry side by side */}
-      <section id="contact" className={`${sectionPadding(compact)} border-t border-white/5 bg-zinc-900/20`}>
+      <section id="contact" className={`${sectionPadding(compact)} border-t border-white/5 bg-zinc-900/20 scroll-mt-20`}>
+        <div id="enquiry" className="h-0 w-0 overflow-hidden" aria-hidden />
         <div className="max-w-6xl mx-auto">
           <SectionHeading3D eyebrow="Contact" title="Get in touch" />
 
@@ -425,7 +442,7 @@ export default function HomePage({
                   Thank you! We&apos;ll contact you soon.
                 </div>
               ) : (
-                <form onSubmit={handleLead} className="space-y-4">
+                <form noValidate onSubmit={handleLead} className="space-y-4">
                   <div>
                     <label className="text-xs text-zinc-500 mb-1 block">Subject</label>
                     <select value={leadSubject} onChange={e => setLeadSubject(e.target.value)} className="w-full px-4 py-3 rounded-lg bg-zinc-950 border border-zinc-800 text-sm focus:border-orange-500 outline-none">
@@ -433,9 +450,10 @@ export default function HomePage({
                     </select>
                   </div>
                   <input required type="text" placeholder="Your name" value={leadName} onChange={e => setLeadName(e.target.value)} className="w-full px-4 py-3 rounded-lg bg-zinc-950 border border-zinc-800 text-sm focus:border-orange-500 outline-none" />
-                  <input required type="tel" placeholder="Phone / WhatsApp" value={leadPhone} onChange={e => setLeadPhone(e.target.value)} className="w-full px-4 py-3 rounded-lg bg-zinc-950 border border-zinc-800 text-sm focus:border-orange-500 outline-none" />
-                  <input type="email" placeholder="Email (optional)" value={leadEmail} onChange={e => setLeadEmail(e.target.value)} className="w-full px-4 py-3 rounded-lg bg-zinc-950 border border-zinc-800 text-sm focus:border-orange-500 outline-none" />
+                  <input required type="tel" inputMode="numeric" placeholder="10-digit mobile (starts with 6–9)" value={leadPhone} onChange={e => { setLeadPhone(e.target.value); setLeadError(''); }} className="w-full px-4 py-3 rounded-lg bg-zinc-950 border border-zinc-800 text-sm focus:border-orange-500 outline-none" />
+                  <input type="email" placeholder="Email (optional)" value={leadEmail} onChange={e => { setLeadEmail(e.target.value); setLeadError(''); }} className="w-full px-4 py-3 rounded-lg bg-zinc-950 border border-zinc-800 text-sm focus:border-orange-500 outline-none" />
                   <textarea required rows={4} placeholder="Your message..." value={leadMessage} onChange={e => setLeadMessage(e.target.value)} className="w-full px-4 py-3 rounded-lg bg-zinc-950 border border-zinc-800 text-sm resize-none focus:border-orange-500 outline-none" />
+                  {leadError && <p className="text-xs text-red-400">{leadError}</p>}
                   <button type="submit" className="btn-3d w-full py-3.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-black font-semibold text-sm">Send enquiry</button>
                 </form>
               )}

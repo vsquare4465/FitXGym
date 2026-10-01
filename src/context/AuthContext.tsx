@@ -9,6 +9,7 @@ export type AuthUser =
       name: string;
       email: string;
       adminRole: AdminRole;
+      phone?: string | null;
       jobTitle?: string | null;
       permissions: AdminPermissions;
     }

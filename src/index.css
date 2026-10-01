@@ -12,7 +12,9 @@ html {
 }
 
 section[id],
-#enquiry {
+#enquiry,
+#legal-content,
+#contact {
   scroll-margin-top: 5.75rem;
 }
 

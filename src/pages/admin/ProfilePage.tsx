@@ -9,6 +9,7 @@ export default function ProfilePage() {
 
   const [name, setName] = useState(admin?.name || '');
   const [email, setEmail] = useState(admin?.email || '');
+  const [phone, setPhone] = useState(admin?.phone || '');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -23,7 +24,7 @@ export default function ProfilePage() {
     setSaving(true);
     setProfileMsg('');
     try {
-      await authApi.updateProfile({ name, email });
+      await authApi.updateProfile({ name, email, phone });
       await refreshUser();
       setProfileMsg('Profile updated successfully.');
     } catch (err) {
@@ -79,6 +80,16 @@ export default function ProfilePage() {
             type="email"
             value={email}
             onChange={e => setEmail(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm"
+          />
+        </div>
+        <div>
+          <label className="text-xs text-zinc-500 mb-1 block">Mobile (for password OTP)</label>
+          <input
+            inputMode="numeric"
+            value={phone}
+            onChange={e => setPhone(e.target.value)}
+            placeholder="10-digit mobile"
             className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm"
           />
         </div>

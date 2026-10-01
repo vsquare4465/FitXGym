@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { X, MessageCircle, CreditCard, RefreshCw, UserCheck, Pencil, Bell } from 'lucide-react';
+import { X, MessageCircle, CreditCard, RefreshCw, UserCheck, Pencil, Bell, Trash2 } from 'lucide-react';
 import { adminApi } from '../../api/client';
 import { Member, MemberProfile, MembershipType, Plan } from '../../types';
 import { formatCurrency, formatDate } from '../../lib/format';
@@ -191,6 +191,18 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
     }
   };
 
+  const handleDelete = async () => {
+    if (!m) return;
+    if (!confirm(`Permanently delete ${m.name}? This removes their membership, payments, and attendance.`)) return;
+    try {
+      await adminApi.deleteMember(m.id);
+      onRefresh();
+      onClose();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Delete failed');
+    }
+  };
+
   const whatsapp = (templateId: string) => {
     if (!m) return;
     const tpl = WHATSAPP_TEMPLATES.find(t => t.id === templateId)!;
@@ -259,6 +271,11 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
               {canEdit && (
                 <button type="button" onClick={handleCheckIn} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-zinc-800 text-white text-xs font-medium">
                   <UserCheck size={14} /> Check in
+                </button>
+              )}
+              {canEdit && (
+                <button type="button" onClick={handleDelete} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-red-500/10 text-red-400 text-xs font-medium">
+                  <Trash2 size={14} /> Delete member
                 </button>
               )}
             </div>
