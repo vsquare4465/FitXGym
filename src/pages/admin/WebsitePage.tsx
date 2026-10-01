@@ -420,7 +420,7 @@ export default function WebsitePage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 max-w-[1600px] mx-auto">
           <div>
             <h1 className="text-xl font-bold">Website content</h1>
-            <p className="text-xs text-zinc-500">Preview updates instantly · Publish when ready for visitors</p>
+            <p className="text-xs text-zinc-500">The right-hand preview is a draft. Visitors see the live site only after you publish.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -443,6 +443,11 @@ export default function WebsitePage() {
             </button>
           </div>
         </div>
+        {hasUnpublishedChanges && (
+          <div className="mt-3 max-w-[1600px] mx-auto rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+            Preview looks right, but the public website is still the old version. Click <strong>Publish to live site</strong> (not Save draft), then confirm.
+          </div>
+        )}
 
         <div className="xl:hidden flex gap-2 mt-3 max-w-[1600px] mx-auto">
           <button

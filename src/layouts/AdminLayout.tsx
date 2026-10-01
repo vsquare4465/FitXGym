@@ -1,11 +1,13 @@
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
-  LayoutDashboard, Users, CreditCard, Receipt, QrCode, LogOut, Flame, Menu,
+  LayoutDashboard, Users, CreditCard, Receipt, QrCode, LogOut, Menu,
   Layers, UserPlus, Globe, MessageCircle, Shield, UserCircle,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useGymData } from '../context/GymDataProvider';
 import { AdminModule, ROLE_LABELS } from '../lib/adminPermissions';
+import BrandLogo from '../components/public/BrandLogo';
 
 const navItems: { to: string; end?: boolean; icon: typeof LayoutDashboard; label: string; module: AdminModule }[] = [
   { to: '/admin', end: true, icon: LayoutDashboard, label: 'Dashboard', module: 'dashboard' },
@@ -22,10 +24,12 @@ const navItems: { to: string; end?: boolean; icon: typeof LayoutDashboard; label
 
 export default function AdminLayout() {
   const { user, logout, can } = useAuth();
+  const { logoUrl, settings } = useGymData();
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const isWebsiteEditor = location.pathname === '/admin/website';
+  const gymName = settings.gymName || 'Fit X Gym';
 
   const visibleNav = navItems.filter(item => can(item.module, 'read'));
 
@@ -38,15 +42,13 @@ export default function AdminLayout() {
 
   const sidebar = (
     <div className="flex flex-col h-full">
-      <div className="p-5 border-b border-zinc-800">
-        <Link to="/admin" className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-orange-600 flex items-center justify-center">
-            <Flame size={16} className="text-black" />
-          </div>
+      <div className="p-4 border-b border-zinc-800">
+        <Link to="/admin" className="flex flex-col gap-2 min-w-0">
+          <BrandLogo src={logoUrl} name={gymName} size="admin" />
           <div>
-            <p className="font-bold text-sm text-white">Fit X Admin</p>
+            <p className="font-bold text-sm text-white leading-tight">{gymName}</p>
             <p className="text-[10px] text-zinc-500">
-              {adminUser ? ROLE_LABELS[adminUser.adminRole] : 'Portal'}
+              Admin · {adminUser ? ROLE_LABELS[adminUser.adminRole] : 'Portal'}
             </p>
           </div>
         </Link>
@@ -114,7 +116,7 @@ export default function AdminLayout() {
       >
         <header className="lg:hidden flex-shrink-0 z-40 h-14 border-b border-zinc-800 bg-zinc-950/95 backdrop-blur flex items-center px-4 gap-3">
           <button type="button" onClick={() => setSidebarOpen(true)} className="p-2 text-zinc-400"><Menu size={20} /></button>
-          <span className="font-semibold text-sm">Fit X Admin</span>
+          <BrandLogo src={logoUrl} name={gymName} size="admin" />
         </header>
 
         <div className={`flex-1 min-h-0 min-w-0 ${isWebsiteEditor ? 'overflow-hidden flex flex-col' : 'overflow-auto'}`}>

@@ -91,7 +91,11 @@ export function GymDataProvider({ children }: { children: React.ReactNode }) {
         fetchIf(canAccess(perms, 'attendance', 'read'), () => adminApi.attendance(), []),
         fetchIf(canAccess(perms, 'dashboard', 'read'), () => adminApi.auditLogs(), []),
         fetchIf(canAccess(perms, 'attendance', 'read'), () => adminApi.qrToken(), { token: '' }),
-        fetchIf(canAccess(perms, 'dashboard', 'read'), () => adminApi.settings(), {}),
+        fetchIf(
+          canAccess(perms, 'dashboard', 'read') || canAccess(perms, 'website', 'read'),
+          () => adminApi.settings(),
+          {},
+        ),
         fetchIf(canAccess(perms, 'website', 'read'), () => adminApi.gallery(), []),
         fetchIf(canAccess(perms, 'website', 'read'), () => adminApi.testimonials(), []),
       ]);

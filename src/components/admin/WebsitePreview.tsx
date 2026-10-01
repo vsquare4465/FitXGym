@@ -62,7 +62,7 @@ export default function WebsitePreview({
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <p className="text-xs font-semibold text-zinc-300">Live preview</p>
-            <p className="text-[10px] text-emerald-400/90 truncate">Updates as you type · draft only</p>
+            <p className="text-[10px] text-emerald-400/90 truncate">Updates as you type · this is a draft, not the live site</p>
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
             <button
@@ -108,7 +108,9 @@ export default function WebsitePreview({
         </div>
 
         {hasUnpublishedChanges && (
-          <p className="text-[10px] text-amber-400/90">Unpublished — hit Publish to update the live site.</p>
+          <p className="text-[11px] font-medium text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded px-2 py-1">
+            Visitors still see the old site until you click Publish to live site.
+          </p>
         )}
       </div>
 

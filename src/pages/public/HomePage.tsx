@@ -19,7 +19,7 @@ import SectionHeading3D from '../../components/public/SectionHeading3D';
 import TiltCard from '../../components/public/TiltCard';
 import { useIsCompactPreview } from '../../context/PreviewViewportContext';
 import { dedupeGalleryByUrl } from '../../lib/galleryUtils';
-import { firstRealImage } from '../../lib/siteImages';
+import { firstGymFloorImage } from '../../lib/siteImages';
 import { grid1Or2, grid1Or2Or3, grid1Or2Or4, grid1Or3, sectionPadding } from '../../lib/previewLayoutClasses';
 
 const ENQUIRY_SUBJECTS = [
@@ -88,15 +88,16 @@ export default function HomePage({
     ? uniqueGallery.filter(g => g.featured)
     : uniqueGallery;
   // Gym-floor photos only — never reuse the owner portrait as hero / about / PT.
-  const gymFloorPhoto = firstRealImage(
+  const gymFloorPhoto = firstGymFloorImage(
+    settings.ownerPhoto,
     settings.aboutImage,
-    featuredGallery[0]?.url,
-    uniqueGallery[0]?.url,
+    ...featuredGallery.map(g => g.url),
+    ...uniqueGallery.map(g => g.url),
   );
-  const heroImage = firstRealImage(settings.heroImage, gymFloorPhoto)
+  const heroImage = firstGymFloorImage(settings.ownerPhoto, settings.heroImage, gymFloorPhoto)
     || 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=1600&q=80';
-  const aboutImage = firstRealImage(settings.aboutImage, gymFloorPhoto);
-  const ptImageSrc = firstRealImage(settings.ptImage, gymFloorPhoto);
+  const aboutImage = firstGymFloorImage(settings.ownerPhoto, settings.aboutImage, gymFloorPhoto);
+  const ptImageSrc = firstGymFloorImage(settings.ownerPhoto, settings.ptImage, gymFloorPhoto);
   const whatsapp = settings.whatsapp || '919760260553';
   const heroHeading = settings.heroHeading || 'Your neighborhood gym in Khurja';
   const heroDesc = settings.heroDescription || 'Strength training, cardio, and friendly guidance — whether you\'re just starting or already consistent.';

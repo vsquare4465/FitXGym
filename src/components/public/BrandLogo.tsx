@@ -1,6 +1,6 @@
 import DefaultGymLogo from './DefaultGymLogo';
 
-type LogoSize = 'header' | 'footer' | 'hero';
+type LogoSize = 'header' | 'footer' | 'hero' | 'admin';
 type LogoVariant = 'default' | 'floating';
 
 interface Props {
@@ -17,6 +17,7 @@ const sizeClasses: Record<LogoSize, string> = {
   header: 'h-10 md:h-12 w-auto max-w-[150px] md:max-w-[190px]',
   footer: 'h-14 md:h-16 w-auto max-w-[200px] md:max-w-[240px]',
   hero: 'h-24 sm:h-28 md:h-32 lg:h-36 w-auto max-w-[320px] md:max-w-[420px]',
+  admin: 'h-9 w-auto max-w-[132px]',
 };
 
 export default function BrandLogo({
@@ -39,7 +40,7 @@ export default function BrandLogo({
       />
     );
 
-    if (size === 'header') {
+    if (size === 'header' || size === 'admin') {
       return (
         <span className="inline-flex items-center rounded-xl bg-zinc-900/60 px-2 py-1 ring-1 ring-white/5">
           {img}

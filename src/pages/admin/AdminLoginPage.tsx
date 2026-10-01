@@ -1,18 +1,26 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Flame, Lock } from 'lucide-react';
+import { Lock } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { ApiError } from '../../api/client';
+import { ApiError, publicApi } from '../../api/client';
+import BrandLogo from '../../components/public/BrandLogo';
 
 export default function AdminLoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [brand, setBrand] = useState({ logoUrl: '', gymName: 'Fit X Gym' });
   const { loginAdmin, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as { from?: string })?.from || '/admin';
+
+  useEffect(() => {
+    publicApi.settings()
+      .then(s => setBrand({ logoUrl: s.logoUrl || '', gymName: s.gymName || 'Fit X Gym' }))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (user?.role === 'admin') {
@@ -38,11 +46,11 @@ export default function AdminLoginPage() {
     <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="w-14 h-14 rounded-xl bg-orange-600 flex items-center justify-center mx-auto mb-4">
-            <Flame size={28} className="text-black" />
+          <div className="flex justify-center mb-4">
+            <BrandLogo src={brand.logoUrl} name={brand.gymName} size="header" />
           </div>
           <h1 className="text-2xl font-bold text-white">Admin sign in</h1>
-          <p className="text-sm text-zinc-500 mt-1">Fit X Gym management portal</p>
+          <p className="text-sm text-zinc-500 mt-1">{brand.gymName} management portal</p>
         </div>
 
         <form onSubmit={handleSubmit} className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6 space-y-4">
