@@ -26,36 +26,43 @@ async function main() {
     console.log('Demo data skipped (SEED_DEMO_DATA is not true).');
   }
 
-  const ownerEmail = (process.env.SEED_OWNER1_EMAIL || 'owner1@fitxgym.com').trim().toLowerCase();
-  const ownerPass = process.env.SEED_OWNER1_PASSWORD || 'FitXOwner1!';
-  const ownerName = 'Deepak Solanki';
-  const ownerHash = await bcrypt.hash(ownerPass, 12);
+  const ownerEmail = process.env.SEED_OWNER1_EMAIL?.trim().toLowerCase();
+  const ownerPass = process.env.SEED_OWNER1_PASSWORD;
+  const ownerName = process.env.SEED_OWNER1_NAME?.trim() || (isProd ? 'Owner' : 'Gym Owner');
 
-  const owners = await prisma.user.findMany({ where: { role: 'OWNER' }, orderBy: { createdAt: 'asc' } });
-  const keepExisting =
-    owners.find(o => /deepak\s+solanki/i.test(o.name)) ||
-    owners.find(o => /deepak/i.test(o.name)) ||
-    owners.find(o => o.email === ownerEmail) ||
-    owners[0];
-
-  let keep = keepExisting;
-  if (!keep) {
-    keep = await prisma.user.create({
-      data: { email: ownerEmail, passwordHash: ownerHash, name: ownerName, role: 'OWNER' },
-    });
+  if (!ownerEmail) {
+    if (isProd) {
+      console.log('SEED_OWNER1_EMAIL not set; existing owner logins were left unchanged.');
+    }
   } else {
-    const data: { name: string; passwordHash?: string } = { name: ownerName };
-    if (!isProd && keep.email === ownerEmail) data.passwordHash = ownerHash;
-    await prisma.user.update({ where: { id: keep.id }, data });
-  }
-
-  const extras = await prisma.user.findMany({
-    where: { role: 'OWNER', NOT: { id: keep.id } },
-    select: { id: true },
-  });
-  if (extras.length) {
-    await prisma.user.deleteMany({ where: { id: { in: extras.map(u => u.id) } } });
-    console.log(`Removed ${extras.length} extra owner login(s).`);
+    const ownerHash = ownerPass && ownerPass.length >= 6 ? await bcrypt.hash(ownerPass, 12) : null;
+    let keep = await prisma.user.findUnique({ where: { email: ownerEmail } });
+    if (!keep) {
+      if (!ownerHash) {
+        console.log('SEED_OWNER1_PASSWORD missing; skipped creating owner login.');
+      } else {
+        keep = await prisma.user.create({
+          data: { email: ownerEmail, passwordHash: ownerHash, name: ownerName, role: 'OWNER' },
+        });
+      }
+    } else {
+      const data: { role?: 'OWNER'; passwordHash?: string } = {};
+      if (keep.role !== 'OWNER') data.role = 'OWNER';
+      if (!isProd && ownerHash) data.passwordHash = ownerHash;
+      if (Object.keys(data).length) {
+        keep = await prisma.user.update({ where: { id: keep.id }, data });
+      }
+    }
+    if (keep) {
+      const extras = await prisma.user.findMany({
+        where: { role: 'OWNER', NOT: { id: keep.id } },
+        select: { id: true },
+      });
+      if (extras.length) {
+        await prisma.user.deleteMany({ where: { id: { in: extras.map(u => u.id) } } });
+        console.log(`Removed ${extras.length} extra owner login(s); kept ${ownerEmail}.`);
+      }
+    }
   }
 
   for (const p of MEMBERSHIP_PLANS) {
@@ -334,7 +341,9 @@ async function main() {
   });
 
   console.log('Seed complete.');
-  console.log(`Owner: ${ownerName} <${ownerEmail}> (staff are added from Admin → Team)`);
+  if (ownerEmail) {
+    console.log(`Owner login kept: ${ownerEmail} (staff are added from Admin → Team)`);
+  }
 }
 
 main()

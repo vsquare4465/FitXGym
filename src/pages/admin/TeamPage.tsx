@@ -153,7 +153,7 @@ export default function TeamPage() {
           <h1 className="text-xl font-bold flex items-center gap-2">
             <Shield size={20} className="text-orange-500" /> Team & access
           </h1>
-          <p className="text-sm text-zinc-500">One owner (Deepak Solanki). Add trainers, reception, and other staff here — they get their own login.</p>
+          <p className="text-sm text-zinc-500">The owner login is the one you set on the server. Add trainers, reception, and other staff here.</p>
         </div>
         {can('team', 'write') && (
           <button type="button" onClick={openAdd} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-orange-600 text-black text-sm font-semibold">
