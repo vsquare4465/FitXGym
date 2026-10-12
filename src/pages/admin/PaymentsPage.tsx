@@ -4,6 +4,7 @@ import { Plus, Search } from 'lucide-react';
 import { useGymData } from '../../context/GymDataProvider';
 import { Member, Payment, Plan } from '../../types';
 import { formatCurrency, formatDate } from '../../lib/format';
+import { parseOptionalAmount } from '../../lib/validation';
 
 const CATEGORIES = [
   'New Membership', 'Renewal', 'Partial Payment', 'Advance Payment',
@@ -68,15 +69,20 @@ export default function PaymentsPage() {
     if (!member) return;
 
     const planPrice = planMap[member.planId]?.price || 0;
-    const expected = form.expectedAmount ? parseFloat(form.expectedAmount) : planPrice;
+    const expectedParsed = parseOptionalAmount(form.expectedAmount);
+    const expected = expectedParsed.value ?? planPrice;
 
     let amount = 0;
     let status: 'Completed' | 'Pending' = 'Completed';
     if (form.payType === 'paid') {
-      amount = parseFloat(form.amount) || expected;
+      const parsed = parseOptionalAmount(form.amount);
+      if (parsed.error || parsed.value === undefined) return;
+      amount = parsed.value;
       status = 'Completed';
     } else if (form.payType === 'partial') {
-      amount = parseFloat(form.amount) || 0;
+      const parsed = parseOptionalAmount(form.amount);
+      if (parsed.error || parsed.value === undefined) return;
+      amount = parsed.value;
       status = 'Pending';
     } else {
       amount = 0;
@@ -185,7 +191,7 @@ export default function PaymentsPage() {
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/70" onClick={() => setShowForm(false)} />
-          <form onSubmit={submit} className="relative bg-zinc-900 border border-zinc-800 rounded-xl p-5 w-full max-w-md space-y-3 max-h-[90vh] overflow-y-auto">
+          <form noValidate onSubmit={submit} className="relative bg-zinc-900 border border-zinc-800 rounded-xl p-5 w-full max-w-md space-y-3 max-h-[90vh] overflow-y-auto">
             <h3 className="font-semibold">Record payment</h3>
             <select required value={form.memberId} onChange={e => setForm({ ...form, memberId: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm">
               <option value="">Select member</option>
@@ -210,11 +216,11 @@ export default function PaymentsPage() {
             </select>
 
             {form.payType !== 'not_paid' && (
-              <input required={form.payType === 'paid'} type="number" placeholder={form.payType === 'partial' ? 'Amount paid so far' : 'Amount paid'} value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
+              <input required={form.payType === 'paid'} type="text" inputMode="decimal" placeholder={form.payType === 'partial' ? 'Amount paid so far' : 'Amount paid'} value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
             )}
 
             {form.payType !== 'paid' && (
-              <input type="number" placeholder="Total amount due" value={form.expectedAmount} onChange={e => setForm({ ...form, expectedAmount: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
+              <input type="text" inputMode="decimal" placeholder="Total amount due" value={form.expectedAmount} onChange={e => setForm({ ...form, expectedAmount: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
             )}
 
             {form.payType !== 'not_paid' && (

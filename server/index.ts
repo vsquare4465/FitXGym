@@ -100,13 +100,24 @@ app.use('/api/auth', authRoutes);
 
 app.use('/api/public', publicRoutes);
 
-app.use('/api/member', memberRoutes);
+app.use('/api/member', (req, res, next) => {
+  const full = (req.originalUrl || '').split('?')[0];
+  if (full === '/api/member' || full.startsWith('/api/member/')) {
+    return memberRoutes(req, res, next);
+  }
+  next();
+});
 
 app.use('/api/team', teamRoutes);
 
 app.use('/api', (req, res, next) => {
   const p = req.path;
-  if (p === '/auth' || p.startsWith('/auth/') || p.startsWith('/public') || p.startsWith('/member') || p.startsWith('/team')) {
+  if (
+    p === '/auth' || p.startsWith('/auth/') ||
+    p === '/public' || p.startsWith('/public/') ||
+    p === '/member' || p.startsWith('/member/') ||
+    p === '/team' || p.startsWith('/team/')
+  ) {
     return res.status(404).json({ error: 'Not found' });
   }
   next();

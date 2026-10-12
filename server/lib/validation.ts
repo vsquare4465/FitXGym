@@ -10,6 +10,14 @@ export function isValidIndianPhone(phone: string): boolean {
   return false;
 }
 
+/** Blank is 0 (unpaid). Rejects negative / non-numeric values. */
+export function parseRupees(raw: unknown): { ok: true; value: number } | { ok: false } {
+  if (raw === undefined || raw === null || String(raw).trim() === '') return { ok: true, value: 0 };
+  const n = Number(String(raw).replace(/[₹,\s]/g, ''));
+  if (!Number.isFinite(n) || n < 0) return { ok: false };
+  return { ok: true, value: n };
+}
+
 export function normalizeStaffPhone(phone?: string | null): string | null {
   if (!phone?.trim()) return null;
   if (!isValidIndianPhone(phone)) return null;

@@ -28,6 +28,8 @@ export default function MembersPage() {
     phone: '',
     planId: '',
     paidAmount: '',
+    paymentMethod: 'Cash',
+    payMode: 'later' as 'later' | 'now',
     membershipType: 'Paid' as MembershipType,
   });
 
@@ -84,25 +86,30 @@ export default function MembersPage() {
       setFormError(phoneError);
       return;
     }
-    const amount = parseOptionalAmount(form.paidAmount);
-    if (amount.error) {
-      setFormError(amount.error);
-      return;
+    let paidAmount: number | undefined;
+    if (form.membershipType === 'Paid' && form.payMode === 'now') {
+      const amount = parseOptionalAmount(form.paidAmount);
+      if (amount.error || amount.value === undefined) {
+        setFormError('Enter the amount paid, or choose Pay later.');
+        return;
+      }
+      paidAmount = amount.value;
+    } else {
+      paidAmount = 0;
     }
     setSaving(true);
     try {
-      const payload: Record<string, unknown> = {
+      await adminApi.createMember({
         name: form.name.trim(),
         email: form.email.trim(),
         phone: form.phone.trim(),
         planId: selectedPlanId,
         membershipType: form.membershipType,
-        paymentMethod: 'Cash',
-      };
-      if (amount.value !== undefined) payload.paidAmount = amount.value;
-      await adminApi.createMember(payload);
+        paidAmount,
+        paymentMethod: form.payMode === 'now' ? form.paymentMethod : 'Cash',
+      });
       setShowAdd(false);
-      setForm({ name: '', email: '', phone: '', planId: planList[0]?.id || '', paidAmount: '', membershipType: 'Paid' });
+      setForm({ name: '', email: '', phone: '', planId: planList[0]?.id || '', paidAmount: '', paymentMethod: 'Cash', payMode: 'later', membershipType: 'Paid' });
       refresh();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Could not create member');
@@ -254,15 +261,32 @@ export default function MembersPage() {
             </select>
             {form.membershipType === 'Paid' && (
               <>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  placeholder="Amount paid now (optional)"
-                  value={form.paidAmount}
-                  onChange={e => { setForm({ ...form, paidAmount: e.target.value }); setFormError(''); }}
+                <select
+                  value={form.payMode}
+                  onChange={e => setForm({ ...form, payMode: e.target.value as 'later' | 'now', paidAmount: e.target.value === 'later' ? '' : form.paidAmount })}
                   className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm"
-                />
-                <p className="text-xs text-zinc-500">Leave blank if they have not paid yet. You can record payment later or send a WhatsApp reminder.</p>
+                >
+                  <option value="later">Pay later (no payment now)</option>
+                  <option value="now">Paid now</option>
+                </select>
+                {form.payMode === 'later' && (
+                  <p className="text-xs text-zinc-500">Member is created with the plan fee due. Record payment anytime from their profile.</p>
+                )}
+                {form.payMode === 'now' && (
+                  <>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="Amount paid now"
+                      value={form.paidAmount}
+                      onChange={e => { setForm({ ...form, paidAmount: e.target.value }); setFormError(''); }}
+                      className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm"
+                    />
+                    <select value={form.paymentMethod} onChange={e => setForm({ ...form, paymentMethod: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm">
+                      {['Cash', 'UPI', 'Bank Transfer', 'Card', 'Other'].map(method => <option key={method}>{method}</option>)}
+                    </select>
+                  </>
+                )}
               </>
             )}
             {form.membershipType !== 'Paid' && (

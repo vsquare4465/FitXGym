@@ -6,7 +6,7 @@ import { Member, MemberProfile, MembershipType, Plan } from '../../types';
 import { formatCurrency, formatDate } from '../../lib/format';
 import StatusBadge from './StatusBadge';
 import { fillTemplate, openWhatsApp, WHATSAPP_TEMPLATES } from '../../lib/whatsapp';
-import { isValidEmail, phoneValidationMessage } from '../../lib/validation';
+import { isValidEmail, parseOptionalAmount, phoneValidationMessage } from '../../lib/validation';
 import { useAuth } from '../../context/AuthContext';
 
 interface Props {
@@ -37,6 +37,9 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
   const [paidAmount, setPaidAmount] = useState('');
   const [payAmount, setPayAmount] = useState('');
   const [payMethod, setPayMethod] = useState('Cash');
+  const [renewPayMode, setRenewPayMode] = useState<'later' | 'now'>('later');
+  const [actionError, setActionError] = useState('');
+  const [actionSaving, setActionSaving] = useState(false);
   const [reminderMsg, setReminderMsg] = useState('');
   const [editForm, setEditForm] = useState({
     name: '',
@@ -151,32 +154,65 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
 
   const handleRenew = async () => {
     if (!memberId || !renewPlanId) return;
-    await adminApi.renewMember(memberId, {
-      planId: renewPlanId,
-      paidAmount: parseFloat(paidAmount) || undefined,
-      paymentMethod: payMethod,
-    });
-    setShowRenew(false);
-    onRefresh();
-    await reload(memberId);
+    setActionError('');
+    let amount = 0;
+    if (!paymentExempt && renewPayMode === 'now') {
+      const parsed = parseOptionalAmount(paidAmount);
+      if (parsed.error || parsed.value === undefined) {
+        setActionError('Enter the amount paid, or choose Pay later.');
+        return;
+      }
+      amount = parsed.value;
+    }
+    setActionSaving(true);
+    try {
+      await adminApi.renewMember(memberId, {
+        planId: renewPlanId,
+        paidAmount: amount,
+        paymentMethod: payMethod,
+      });
+      setShowRenew(false);
+      setPaidAmount('');
+      setRenewPayMode('later');
+      onRefresh();
+      await reload(memberId);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Could not renew membership');
+    } finally {
+      setActionSaving(false);
+    }
   };
 
   const handlePayment = async () => {
-    if (!m || !payAmount) return;
-    await adminApi.addPayment({
-      memberId: m.id,
-      memberName: m.name,
-      amount: parseFloat(payAmount),
-      date: new Date().toISOString().split('T')[0],
-      category: 'Partial Payment',
-      paymentMethod: payMethod,
-      status: 'Completed',
-      invoiceNo: `FTX-INV-${Math.floor(6000 + Math.random() * 3000)}`,
-      membershipId: profile?.currentMembership?.id,
-    });
-    setShowPayment(false);
-    onRefresh();
-    await reload(memberId);
+    if (!m) return;
+    setActionError('');
+    const parsed = parseOptionalAmount(payAmount);
+    if (parsed.error || parsed.value === undefined || parsed.value <= 0) {
+      setActionError('Enter the amount received.');
+      return;
+    }
+    setActionSaving(true);
+    try {
+      await adminApi.addPayment({
+        memberId: m.id,
+        memberName: m.name,
+        amount: parsed.value,
+        date: new Date().toISOString().split('T')[0],
+        category: 'Partial Payment',
+        paymentMethod: payMethod,
+        status: 'Completed',
+        membershipId: profile?.currentMembership?.id,
+        expectedAmount: outstanding > parsed.value ? outstanding : undefined,
+      });
+      setShowPayment(false);
+      setPayAmount('');
+      onRefresh();
+      await reload(memberId);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Could not save payment');
+    } finally {
+      setActionSaving(false);
+    }
   };
 
   const handleCheckIn = async () => {
@@ -251,12 +287,12 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
                 </button>
               )}
               {canEdit && (
-                <button type="button" onClick={() => { setRenewPlanId(m.planId); setShowRenew(true); }} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-orange-600 text-black text-xs font-semibold">
+                <button type="button" onClick={() => { setRenewPlanId(m.planId); setActionError(''); setRenewPayMode('later'); setPaidAmount(''); setShowRenew(true); }} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-orange-600 text-black text-xs font-semibold">
                   <RefreshCw size={14} /> Renew
                 </button>
               )}
               {canEdit && !paymentExempt && (
-                <button type="button" onClick={() => setShowPayment(true)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-zinc-800 text-white text-xs font-medium">
+                <button type="button" onClick={() => { setActionError(''); setPayAmount(''); setShowPayment(true); }} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-zinc-800 text-white text-xs font-medium">
                   <CreditCard size={14} /> Record payment
                 </button>
               )}
@@ -435,14 +471,28 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
               </select>
               {!paymentExempt && (
                 <>
-                  <input type="number" placeholder="Amount paid" value={paidAmount} onChange={e => setPaidAmount(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
-                  <select value={payMethod} onChange={e => setPayMethod(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm">
-                    {['Cash', 'UPI', 'Bank Transfer', 'Card', 'Other'].map(method => <option key={method}>{method}</option>)}
+                  <select value={renewPayMode} onChange={e => setRenewPayMode(e.target.value as 'later' | 'now')} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm">
+                    <option value="later">Pay later (no payment now)</option>
+                    <option value="now">Paid now</option>
                   </select>
+                  {renewPayMode === 'now' && (
+                    <>
+                      <input type="text" inputMode="decimal" placeholder="Amount paid now" value={paidAmount} onChange={e => { setPaidAmount(e.target.value); setActionError(''); }} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
+                      <select value={payMethod} onChange={e => setPayMethod(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm">
+                        {['Cash', 'UPI', 'Bank Transfer', 'Card', 'Other'].map(method => <option key={method}>{method}</option>)}
+                      </select>
+                    </>
+                  )}
+                  {renewPayMode === 'later' && (
+                    <p className="text-xs text-zinc-500">Membership is extended now. Payment stays due until you record it.</p>
+                  )}
                 </>
               )}
               {paymentExempt && <p className="text-xs text-violet-300">Complimentary / staff — no payment required.</p>}
-              <button type="button" onClick={handleRenew} className="w-full py-2.5 rounded-lg bg-orange-600 text-black font-semibold text-sm">Confirm renewal</button>
+              {actionError && <p className="text-xs text-red-400">{actionError}</p>}
+              <button type="button" disabled={actionSaving} onClick={handleRenew} className="w-full py-2.5 rounded-lg bg-orange-600 text-black font-semibold text-sm disabled:opacity-50">
+                {actionSaving ? 'Saving...' : 'Confirm renewal'}
+              </button>
             </div>
           </div>
         )}
@@ -452,11 +502,15 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
             <div className="absolute inset-0 bg-black/70" onClick={() => setShowPayment(false)} />
             <div className="relative bg-zinc-900 border border-zinc-800 rounded-xl p-5 w-full max-w-sm space-y-3">
               <h3 className="font-semibold">Record payment</h3>
-              <input type="number" placeholder="Amount" value={payAmount} onChange={e => setPayAmount(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
+              {outstanding > 0 && <p className="text-xs text-zinc-500">Due now: {formatCurrency(outstanding)}</p>}
+              <input type="text" inputMode="decimal" placeholder="Amount received" value={payAmount} onChange={e => { setPayAmount(e.target.value); setActionError(''); }} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
               <select value={payMethod} onChange={e => setPayMethod(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm">
                 {['Cash', 'UPI', 'Bank Transfer', 'Card', 'Other'].map(method => <option key={method}>{method}</option>)}
               </select>
-              <button type="button" onClick={handlePayment} className="w-full py-2.5 rounded-lg bg-orange-600 text-black font-semibold text-sm">Save payment</button>
+              {actionError && <p className="text-xs text-red-400">{actionError}</p>}
+              <button type="button" disabled={actionSaving} onClick={handlePayment} className="w-full py-2.5 rounded-lg bg-orange-600 text-black font-semibold text-sm disabled:opacity-50">
+                {actionSaving ? 'Saving...' : 'Save payment'}
+              </button>
             </div>
           </div>
         )}

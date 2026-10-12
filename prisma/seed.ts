@@ -232,6 +232,27 @@ async function main() {
     });
   }
 
+  // Live gym: strip leftover sample records from an old seed or DB restore.
+  // Only removes known demo IDs that still match the original sample email.
+  if (isProd && !seedDemo) {
+    const demoMembers = await prisma.member.findMany({
+      where: {
+        OR: INITIAL_MEMBERS.map(m => ({ id: m.id, email: m.email })),
+      },
+      select: { id: true, email: true },
+    });
+    if (demoMembers.length) {
+      const ids = demoMembers.map(m => m.id);
+      const emails = demoMembers.map(m => m.email);
+      await prisma.member.deleteMany({ where: { id: { in: ids } } });
+      await prisma.user.deleteMany({ where: { email: { in: emails }, role: 'MEMBER' } });
+      console.log(`Removed ${demoMembers.length} leftover sample member(s) from production.`);
+    }
+    await prisma.payment.deleteMany({ where: { id: { in: INITIAL_PAYMENTS.map(p => p.id) } } });
+    await prisma.expense.deleteMany({ where: { id: { in: INITIAL_EXPENSES.map(e => e.id) } } });
+    await prisma.attendanceRecord.deleteMany({ where: { id: { in: INITIAL_ATTENDANCE.map(a => a.id) } } });
+  }
+
   const galleryUrls = [
     'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=600&auto=format&fit=crop&q=80',
     'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=600&auto=format&fit=crop&q=80',

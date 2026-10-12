@@ -6,7 +6,7 @@ import { isPaymentExempt } from '../lib/permissions.js';
 import { toClientMember } from '../lib/memberMapper.js';
 import { buildDashboard, getMemberProfile } from '../lib/dashboardStats.js';
 import { nextMemberId } from '../lib/memberId.js';
-import { isValidEmail, isValidIndianPhone } from '../lib/validation.js';
+import { isValidEmail, isValidIndianPhone, parseRupees } from '../lib/validation.js';
 import { normalizeWhatsAppNumber } from '../lib/whatsapp.js';
 import { daysUntil } from '../lib/dateRange.js';
 
@@ -79,15 +79,11 @@ router.post('/members', requirePermission('members', 'write'), async (req, res) 
   if (!['Paid', 'Complimentary', 'Staff'].includes(membershipType)) {
     return res.status(400).json({ error: 'Invalid membership type' });
   }
-  const paidRaw = body.paidAmount;
-  let paidAmount = 0;
-  if (paidRaw !== undefined && paidRaw !== null && String(paidRaw).trim() !== '') {
-    const n = Number(String(paidRaw).replace(/[₹,\s]/g, ''));
-    if (!Number.isFinite(n) || n < 0) {
-      return res.status(400).json({ error: 'Enter a valid amount, or leave amount blank if not paid yet' });
-    }
-    paidAmount = n;
+  const paidParsed = parseRupees(body.paidAmount);
+  if (!paidParsed.ok) {
+    return res.status(400).json({ error: 'Enter a valid amount, or choose Pay later if not paid yet' });
   }
+  let paidAmount = paidParsed.value;
   const plan = body.planId ? await prisma.plan.findUnique({ where: { id: body.planId } }) : null;
   if (!plan) {
     return res.status(400).json({ error: 'Pick a membership plan' });
@@ -177,7 +173,7 @@ router.post('/members', requirePermission('members', 'write'), async (req, res) 
         },
       });
 
-      if (!paymentExempt && paidAmount > 0) {
+      if (!paymentExempt && planPrice > 0) {
         await tx.payment.create({
           data: {
             memberId: id,
@@ -187,11 +183,11 @@ router.post('/members', requirePermission('members', 'write'), async (req, res) 
             date: joinDate,
             category: 'New Membership',
             paymentMethod: body.paymentMethod || 'Cash',
-            status: paidAmount >= planPrice ? 'Completed' : 'Pending',
+            status: paidAmount <= 0 ? 'Pending' : paidAmount >= planPrice ? 'Completed' : 'Pending',
             invoiceNo: `FTX-INV-${Math.floor(6000 + Math.random() * 3000)}`,
             membershipId: membership.id,
             recordedBy: body.recordedBy,
-            notes: body.notes,
+            notes: body.notes || (paidAmount <= 0 ? 'Not paid yet' : undefined),
           },
         });
       }
@@ -219,6 +215,7 @@ router.put('/members/:id', requirePermission('members', 'write'), async (req, re
   if (body.phone !== undefined && !isValidIndianPhone(String(body.phone || ''))) {
     return res.status(400).json({ error: 'Enter a valid 10-digit Indian mobile number' });
   }
+  try {
   const updated = await prisma.member.update({
     where: { id },
     data: {
@@ -262,6 +259,13 @@ router.put('/members/:id', requirePermission('members', 'write'), async (req, re
 
   await addLog(`MEMBERSHIP: Updated profile for ${updated.name} (${id})`);
   res.json(toClientMember(updated));
+  } catch (err) {
+    if (prismaErrorCode(err) === 'P2002') {
+      return res.status(400).json({ error: 'A member with this email already exists' });
+    }
+    console.error(err);
+    return res.status(500).json({ error: 'Could not update member. Try again.' });
+  }
 });
 
 router.post('/members/:id/deactivate', requirePermission('members', 'write'), async (req, res) => {
@@ -274,12 +278,17 @@ router.post('/members/:id/deactivate', requirePermission('members', 'write'), as
 });
 
 router.post('/members/:id/renew', requirePermission('members', 'write'), async (req, res) => {
-  const { planId, paidAmount, paymentMethod, notes, recordedBy } = req.body;
+  const { planId, paymentMethod, notes, recordedBy } = req.body;
   const member = await prisma.member.findUnique({ where: { id: req.params.id } });
   if (!member) return res.status(404).json({ error: 'Member not found' });
 
   const plan = await prisma.plan.findUnique({ where: { id: planId || member.planId } });
-  if (!plan) return res.status(400).json({ error: 'Plan not found' });
+  if (!plan) return res.status(400).json({ error: 'Pick a membership plan' });
+
+  const paidParsed = parseRupees(req.body.paidAmount);
+  if (!paidParsed.ok) {
+    return res.status(400).json({ error: 'Enter a valid amount, or choose Pay later' });
+  }
 
   const startDate = new Date().toISOString().split('T')[0];
   const months = planDurationMonths(plan.duration);
@@ -287,46 +296,55 @@ router.post('/members/:id/renew', requirePermission('members', 'write'), async (
   const endDate = addMonths(base, months);
   const paymentExempt = isPaymentExempt(member.membershipType);
   const amount = paymentExempt ? 0 : plan.price;
-  const paid = paymentExempt ? 0 : Math.max(0, Number(paidAmount) || 0);
+  const paid = paymentExempt ? 0 : paidParsed.value;
 
-  const membership = await prisma.membership.create({
-    data: {
-      memberId: member.id,
-      planId: plan.id,
-      startDate,
-      endDate,
-      status: 'Active',
-      amount,
-      paidAmount: paid,
-    },
-  });
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const membership = await tx.membership.create({
+        data: {
+          memberId: member.id,
+          planId: plan.id,
+          startDate,
+          endDate,
+          status: 'Active',
+          amount,
+          paidAmount: paid,
+        },
+      });
 
-  const updated = await prisma.member.update({
-    where: { id: member.id },
-    data: { planId: plan.id, expiryDate: endDate, status: 'Active' },
-  });
+      const updated = await tx.member.update({
+        where: { id: member.id },
+        data: { planId: plan.id, expiryDate: endDate, status: 'Active' },
+      });
 
-  if (!paymentExempt) {
-    await prisma.payment.create({
-      data: {
-        memberId: member.id,
-        memberName: member.name,
-        amount: paid,
-        expectedAmount: amount > paid ? amount : undefined,
-        date: startDate,
-        category: 'Renewal',
-        paymentMethod: paymentMethod || 'Cash',
-        status: paid >= amount ? 'Completed' : 'Pending',
-        invoiceNo: `FTX-INV-${Math.floor(6000 + Math.random() * 3000)}`,
-        membershipId: membership.id,
-        notes,
-        recordedBy,
-      },
+      if (!paymentExempt && amount > 0) {
+        await tx.payment.create({
+          data: {
+            memberId: member.id,
+            memberName: member.name,
+            amount: paid,
+            expectedAmount: amount > paid ? amount : undefined,
+            date: startDate,
+            category: 'Renewal',
+            paymentMethod: paymentMethod || 'Cash',
+            status: paid <= 0 ? 'Pending' : paid >= amount ? 'Completed' : 'Pending',
+            invoiceNo: `FTX-INV-${Math.floor(6000 + Math.random() * 3000)}`,
+            membershipId: membership.id,
+            notes: notes || (paid <= 0 ? 'Not paid yet' : undefined),
+            recordedBy,
+          },
+        });
+      }
+
+      return { updated, membership };
     });
-  }
 
-  await addLog(`RENEWAL: ${member.name} renewed ${plan.name} until ${endDate}`);
-  res.json({ member: toClientMember(updated), membership });
+    await addLog(`RENEWAL: ${member.name} renewed ${plan.name} until ${endDate}`);
+    res.json({ member: toClientMember(result.updated), membership: result.membership });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Could not renew membership. Try again.' });
+  }
 });
 
 router.delete('/members/:id', requirePermission('members', 'write'), async (req, res) => {
@@ -375,18 +393,50 @@ router.get('/payments', requirePermission('payments', 'read'), async (_req, res)
 
 router.post('/payments', requirePermission('payments', 'write'), async (req, res) => {
   const p = req.body;
-  const created = await prisma.payment.create({ data: p });
-  if (p.membershipId && p.status === 'Completed') {
-    const ms = await prisma.membership.findUnique({ where: { id: p.membershipId } });
-    if (ms) {
-      await prisma.membership.update({
-        where: { id: p.membershipId },
-        data: { paidAmount: ms.paidAmount + p.amount },
-      });
-    }
+  if (!p.memberId) return res.status(400).json({ error: 'Select a member' });
+  const member = await prisma.member.findUnique({ where: { id: String(p.memberId) } });
+  if (!member) return res.status(400).json({ error: 'Member not found' });
+  const paidParsed = parseRupees(p.amount);
+  if (!paidParsed.ok) {
+    return res.status(400).json({ error: 'Enter a valid amount, or record as not paid' });
   }
-  await addLog(`PAYMENT: Rs.${p.amount} from ${p.memberName} (${p.category})`);
-  res.json(created);
+  const expectedParsed = parseRupees(p.expectedAmount);
+  const expectedAmount = expectedParsed.ok ? expectedParsed.value : undefined;
+  const amount = paidParsed.value;
+  const status = p.status === 'Pending' || amount <= 0 ? 'Pending' : p.status === 'Failed' ? 'Failed' : 'Completed';
+  try {
+    const created = await prisma.payment.create({
+      data: {
+        memberId: member.id,
+        memberName: p.memberName || member.name,
+        amount,
+        date: p.date || new Date().toISOString().split('T')[0],
+        category: p.category || 'Partial Payment',
+        paymentMethod: p.paymentMethod || 'Cash',
+        status,
+        invoiceNo: p.invoiceNo || `FTX-INV-${Math.floor(6000 + Math.random() * 3000)}`,
+        referenceNo: p.referenceNo || undefined,
+        membershipId: p.membershipId || undefined,
+        notes: p.notes || (amount <= 0 ? 'Not paid yet' : undefined),
+        recordedBy: p.recordedBy || undefined,
+        expectedAmount: expectedAmount && expectedAmount > amount ? expectedAmount : undefined,
+      },
+    });
+    if (p.membershipId && amount > 0) {
+      const ms = await prisma.membership.findUnique({ where: { id: String(p.membershipId) } });
+      if (ms) {
+        await prisma.membership.update({
+          where: { id: String(p.membershipId) },
+          data: { paidAmount: ms.paidAmount + amount },
+        });
+      }
+    }
+    await addLog(`PAYMENT: Rs.${amount} from ${created.memberName} (${created.category})`);
+    res.json(created);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Could not save payment. Try again.' });
+  }
 });
 
 router.put('/payments/:id', requirePermission('payments', 'write'), async (req, res) => {
