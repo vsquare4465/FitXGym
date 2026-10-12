@@ -12,6 +12,16 @@ export function isValidIndianPhone(phone: string): boolean {
   return false;
 }
 
+/** Optional rupees field — blank is allowed (unpaid). */
+export function parseOptionalAmount(raw?: string | number | null): { value?: number; error?: string } {
+  if (raw === undefined || raw === null) return {};
+  const s = String(raw).trim();
+  if (!s) return {};
+  const n = Number(s.replace(/[₹,\s]/g, ''));
+  if (!Number.isFinite(n) || n < 0) return { error: 'Enter a valid amount, or leave it blank if not paid yet.' };
+  return { value: n };
+}
+
 export function phoneValidationMessage(phone: string): string | null {
   const d = phone.replace(/\D/g, '');
   if (d.length < 10) return 'Enter a 10-digit Indian mobile number.';

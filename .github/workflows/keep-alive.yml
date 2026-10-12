@@ -1,0 +1,20 @@
+# Pings the live site so Render's free instance does not sleep after 15 minutes
+# of idle traffic (that sleep shows the "Welcome to Render" page to visitors).
+# This is a stopgap. A live gym site should use a paid Render instance (Starter, ~$7/month)
+# which never spins down. Dashboard → fitx-gym → Instance → change plan.
+name: Keep live site awake
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping health endpoint
+        run: |
+          curl -fsS --retry 2 --retry-delay 15 --max-time 90 \
+            https://fitxgymkhurja.com/api/health

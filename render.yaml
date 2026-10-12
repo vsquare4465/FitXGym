@@ -3,6 +3,8 @@ services:
   - type: web
     name: fitx-gym
     runtime: node
+    # Free sleeps after 15 min idle and shows Render's splash to visitors.
+    # For the live gym, change this service in the Render Dashboard to Starter (~$7/month).
     plan: free
     # Seed runs on deploy so you do not need Render Shell (paid).
     # Production seed only creates missing owners/plans — it will not reset live passwords.

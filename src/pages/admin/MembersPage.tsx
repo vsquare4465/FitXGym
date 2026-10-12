@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Search, Plus, MessageCircle, Eye, Trash2 } from 'lucide-react';
 import { useGymData } from '../../context/GymDataProvider';
 import { Member, MembershipType, Payment, Plan } from '../../types';
@@ -9,7 +9,7 @@ import StatusBadge from '../../components/admin/StatusBadge';
 import MemberProfileDrawer from '../../components/admin/MemberProfileDrawer';
 import { adminApi } from '../../api/client';
 import { fillTemplate, openWhatsApp, WHATSAPP_TEMPLATES } from '../../lib/whatsapp';
-import { isValidEmail, phoneValidationMessage } from '../../lib/validation';
+import { isValidEmail, parseOptionalAmount, phoneValidationMessage } from '../../lib/validation';
 
 type Filter = 'all' | 'active' | 'expiring' | 'expired' | 'pending' | 'free';
 
@@ -20,17 +20,26 @@ export default function MembersPage() {
   const [filter, setFilter] = useState<Filter>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
   const [form, setForm] = useState({
     name: '',
     email: '',
     phone: '',
-    planId: 'plan_monthly',
+    planId: '',
     paidAmount: '',
     membershipType: 'Paid' as MembershipType,
   });
 
-  const planMap = useMemo(() => Object.fromEntries((plans as Plan[]).map(p => [p.id, p])), [plans]);
+  const planList = plans as Plan[];
+  const planMap = useMemo(() => Object.fromEntries(planList.map(p => [p.id, p])), [planList]);
+  const selectedPlanId = planList.some(p => p.id === form.planId) ? form.planId : (planList[0]?.id || '');
+
+  useEffect(() => {
+    if (selectedPlanId && selectedPlanId !== form.planId) {
+      setForm(f => ({ ...f, planId: selectedPlanId }));
+    }
+  }, [selectedPlanId, form.planId]);
 
   const enriched = useMemo(() => {
     return (members as Member[]).map(m => ({
@@ -56,7 +65,16 @@ export default function MembersPage() {
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (saving) return;
     setFormError('');
+    if (!form.name.trim()) {
+      setFormError("Enter the member's full name.");
+      return;
+    }
+    if (!selectedPlanId) {
+      setFormError('Pick a membership plan.');
+      return;
+    }
     if (!isValidEmail(form.email)) {
       setFormError('Enter a valid email address.');
       return;
@@ -66,17 +84,30 @@ export default function MembersPage() {
       setFormError(phoneError);
       return;
     }
+    const amount = parseOptionalAmount(form.paidAmount);
+    if (amount.error) {
+      setFormError(amount.error);
+      return;
+    }
+    setSaving(true);
     try {
-      await adminApi.createMember({
-        ...form,
-        paidAmount: form.paidAmount ? parseFloat(form.paidAmount) : undefined,
+      const payload: Record<string, unknown> = {
+        name: form.name.trim(),
+        email: form.email.trim(),
+        phone: form.phone.trim(),
+        planId: selectedPlanId,
+        membershipType: form.membershipType,
         paymentMethod: 'Cash',
-      });
+      };
+      if (amount.value !== undefined) payload.paidAmount = amount.value;
+      await adminApi.createMember(payload);
       setShowAdd(false);
-      setForm({ name: '', email: '', phone: '', planId: 'plan_monthly', paidAmount: '', membershipType: 'Paid' });
+      setForm({ name: '', email: '', phone: '', planId: planList[0]?.id || '', paidAmount: '', membershipType: 'Paid' });
       refresh();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Could not create member');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -206,7 +237,7 @@ export default function MembersPage() {
       {showAdd && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/70" onClick={() => setShowAdd(false)} />
-          <form onSubmit={handleAdd} className="relative bg-zinc-900 border border-zinc-800 rounded-xl p-5 w-full max-w-md space-y-3">
+          <form noValidate onSubmit={handleAdd} className="relative bg-zinc-900 border border-zinc-800 rounded-xl p-5 w-full max-w-md space-y-3">
             <h3 className="font-semibold">Add new member</h3>
             <p className="text-xs text-zinc-500">Member ID is assigned in sequence (MEM-0001, MEM-0002, …).</p>
             <input required placeholder="Full name" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
@@ -217,20 +248,30 @@ export default function MembersPage() {
               <option value="Complimentary">Complimentary (free / known person)</option>
               <option value="Staff">Staff (gym team)</option>
             </select>
-            <select value={form.planId} onChange={e => setForm({ ...form, planId: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm">
-              {(plans as Plan[]).map(p => <option key={p.id} value={p.id}>{p.name} – ₹{p.price}</option>)}
+            <select value={selectedPlanId} onChange={e => setForm({ ...form, planId: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm">
+              {!selectedPlanId && <option value="">Select a plan</option>}
+              {planList.map(p => <option key={p.id} value={p.id}>{p.name} – ₹{p.price}</option>)}
             </select>
             {form.membershipType === 'Paid' && (
               <>
-                <input type="number" min={0} placeholder="Amount paid now (leave empty if not paid yet)" value={form.paidAmount} onChange={e => setForm({ ...form, paidAmount: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
-                <p className="text-xs text-zinc-500">If left empty, the full plan fee stays due and you can send a WhatsApp payment reminder from the member profile.</p>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="Amount paid now (optional)"
+                  value={form.paidAmount}
+                  onChange={e => { setForm({ ...form, paidAmount: e.target.value }); setFormError(''); }}
+                  className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm"
+                />
+                <p className="text-xs text-zinc-500">Leave blank if they have not paid yet. You can record payment later or send a WhatsApp reminder.</p>
               </>
             )}
             {form.membershipType !== 'Paid' && (
               <p className="text-xs text-violet-300">No payment will be recorded for complimentary / staff members.</p>
             )}
             {formError && <p className="text-xs text-red-400">{formError}</p>}
-            <button type="submit" className="w-full py-2.5 rounded-lg bg-orange-600 text-black font-semibold text-sm">Create member</button>
+            <button type="submit" disabled={saving} className="w-full py-2.5 rounded-lg bg-orange-600 text-black font-semibold text-sm disabled:opacity-50">
+              {saving ? 'Creating...' : 'Create member'}
+            </button>
           </form>
         </div>
       )}

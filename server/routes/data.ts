@@ -60,97 +60,154 @@ router.get('/members/:id/profile', requirePermission('members', 'read'), async (
   res.json(profile);
 });
 
+function prismaErrorCode(err: unknown): string {
+  if (err && typeof err === 'object' && 'code' in err) return String((err as { code: unknown }).code);
+  return '';
+}
+
 router.post('/members', requirePermission('members', 'write'), async (req, res) => {
   const body = req.body;
-  if (!body.name?.trim()) return res.status(400).json({ error: 'Name is required' });
+  const name = String(body.name || '').trim();
+  if (!name) return res.status(400).json({ error: 'Name is required' });
   if (!isValidEmail(String(body.email || ''))) {
     return res.status(400).json({ error: 'Enter a valid email address' });
   }
   if (!isValidIndianPhone(String(body.phone || ''))) {
     return res.status(400).json({ error: 'Enter a valid 10-digit Indian mobile number' });
   }
-  const id = await nextMemberId();
+  const membershipType = body.membershipType || 'Paid';
+  if (!['Paid', 'Complimentary', 'Staff'].includes(membershipType)) {
+    return res.status(400).json({ error: 'Invalid membership type' });
+  }
+  const paidRaw = body.paidAmount;
+  let paidAmount = 0;
+  if (paidRaw !== undefined && paidRaw !== null && String(paidRaw).trim() !== '') {
+    const n = Number(String(paidRaw).replace(/[₹,\s]/g, ''));
+    if (!Number.isFinite(n) || n < 0) {
+      return res.status(400).json({ error: 'Enter a valid amount, or leave amount blank if not paid yet' });
+    }
+    paidAmount = n;
+  }
+  const plan = body.planId ? await prisma.plan.findUnique({ where: { id: body.planId } }) : null;
+  if (!plan) {
+    return res.status(400).json({ error: 'Pick a membership plan' });
+  }
+  const email = String(body.email).trim().toLowerCase();
+  const phone = String(body.phone).trim();
+  const existingEmail = await prisma.member.findUnique({ where: { email } });
+  if (existingEmail) {
+    return res.status(400).json({ error: 'A member with this email already exists' });
+  }
+  const existingUser = await prisma.user.findUnique({ where: { email } });
+  if (existingUser && existingUser.role !== 'MEMBER') {
+    return res.status(400).json({ error: 'This email is already used by a staff login' });
+  }
+  if (existingUser?.memberId) {
+    const linked = await prisma.member.findUnique({ where: { id: existingUser.memberId } });
+    if (linked) {
+      return res.status(400).json({ error: 'This email is already used by another login' });
+    }
+  }
+
   const password = body.password || '123456';
   const passwordHash = await bcrypt.hash(password, 10);
   const joinDate = body.joinDate || new Date().toISOString().split('T')[0];
-  const plan = await prisma.plan.findUnique({ where: { id: body.planId } });
-  const months = plan ? planDurationMonths(plan.duration) : 1;
+  const months = planDurationMonths(plan.duration);
   const expiryDate = body.expiryDate || addMonths(joinDate, months);
-  const membershipType = body.membershipType || 'Paid';
   const paymentExempt = isPaymentExempt(membershipType);
+  const planPrice = paymentExempt ? 0 : (plan.price || 0);
+  if (paymentExempt) paidAmount = 0;
 
-  const created = await prisma.member.create({
-    data: {
-      id,
-      name: body.name,
-      email: body.email,
-      phone: body.phone,
-      whatsapp: body.whatsapp || body.phone,
-      dateOfBirth: body.dateOfBirth,
-      address: body.address,
-      passwordHash,
-      photo: body.photo || '',
-      joinDate,
-      expiryDate,
-      planId: body.planId,
-      membershipType,
-      status: body.status || 'Active',
-      emergencyContact: body.emergencyContact || {},
-      medicalHistory: body.medicalHistory || [],
-      qrCodeValue: body.qrCodeValue || id,
-      weightHistory: [],
-      measurementsHistory: [],
-      workoutPlan: [],
-      dietPlan: [],
-      messages: [],
-    },
-  });
+  try {
+    const created = await prisma.$transaction(async (tx) => {
+      const id = await nextMemberId(tx);
+      const member = await tx.member.create({
+        data: {
+          id,
+          name,
+          email,
+          phone,
+          whatsapp: body.whatsapp || phone,
+          dateOfBirth: body.dateOfBirth,
+          address: body.address,
+          passwordHash,
+          photo: body.photo || '',
+          joinDate,
+          expiryDate,
+          planId: plan.id,
+          membershipType,
+          status: body.status || 'Active',
+          emergencyContact: body.emergencyContact || {},
+          medicalHistory: body.medicalHistory || [],
+          qrCodeValue: body.qrCodeValue || id,
+          weightHistory: [],
+          measurementsHistory: [],
+          workoutPlan: [],
+          dietPlan: [],
+          messages: [],
+        },
+      });
 
-  await prisma.user.create({
-    data: {
-      email: body.email,
-      passwordHash,
-      name: body.name,
-      role: 'MEMBER',
-      memberId: id,
-    },
-  });
+      if (existingUser) {
+        await tx.user.update({
+          where: { id: existingUser.id },
+          data: { passwordHash, name, role: 'MEMBER', memberId: id },
+        });
+      } else {
+        await tx.user.create({
+          data: {
+            email,
+            passwordHash,
+            name,
+            role: 'MEMBER',
+            memberId: id,
+          },
+        });
+      }
 
-  const planPrice = paymentExempt ? 0 : (plan?.price || 0);
-  const paidAmount = paymentExempt ? 0 : Math.max(0, Number(body.paidAmount) || 0);
-  const membership = await prisma.membership.create({
-    data: {
-      memberId: id,
-      planId: body.planId,
-      startDate: joinDate,
-      endDate: expiryDate,
-      status: 'Active',
-      amount: planPrice,
-      paidAmount,
-    },
-  });
+      const membership = await tx.membership.create({
+        data: {
+          memberId: id,
+          planId: plan.id,
+          startDate: joinDate,
+          endDate: expiryDate,
+          status: 'Active',
+          amount: planPrice,
+          paidAmount,
+        },
+      });
 
-  if (!paymentExempt && planPrice > 0) {
-    await prisma.payment.create({
-      data: {
-        memberId: id,
-        memberName: body.name,
-        amount: paidAmount,
-        expectedAmount: planPrice > paidAmount ? planPrice : undefined,
-        date: joinDate,
-        category: 'New Membership',
-        paymentMethod: body.paymentMethod || 'Cash',
-        status: paidAmount >= planPrice ? 'Completed' : 'Pending',
-        invoiceNo: `FTX-INV-${Math.floor(6000 + Math.random() * 3000)}`,
-        membershipId: membership.id,
-        recordedBy: body.recordedBy,
-        notes: body.notes,
-      },
+      if (!paymentExempt && paidAmount > 0) {
+        await tx.payment.create({
+          data: {
+            memberId: id,
+            memberName: name,
+            amount: paidAmount,
+            expectedAmount: planPrice > paidAmount ? planPrice : undefined,
+            date: joinDate,
+            category: 'New Membership',
+            paymentMethod: body.paymentMethod || 'Cash',
+            status: paidAmount >= planPrice ? 'Completed' : 'Pending',
+            invoiceNo: `FTX-INV-${Math.floor(6000 + Math.random() * 3000)}`,
+            membershipId: membership.id,
+            recordedBy: body.recordedBy,
+            notes: body.notes,
+          },
+        });
+      }
+
+      return member;
     });
-  }
 
-  await addLog(`MEMBERSHIP: Added member ${body.name} (${id})`);
-  res.json(toClientMember(created));
+    await addLog(`MEMBERSHIP: Added member ${name} (${created.id})`);
+    res.json(toClientMember(created));
+  } catch (err) {
+    if (prismaErrorCode(err) === 'P2002') {
+      return res.status(400).json({ error: 'A member with this email already exists' });
+    }
+    console.error(err);
+    return res.status(500).json({ error: 'Could not create member. Try again.' });
+  }
 });
 
 router.put('/members/:id', requirePermission('members', 'write'), async (req, res) => {
