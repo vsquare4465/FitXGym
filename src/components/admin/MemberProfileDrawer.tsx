@@ -55,6 +55,9 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
     occupation: '',
     alcoholic: false,
     notes: '',
+    joinDate: '',
+    planStartDate: '',
+    expiryDate: '',
     emergencyName: '',
     emergencyPhone: '',
     emergencyRelationship: '',
@@ -100,6 +103,9 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
       occupation: m.occupation || '',
       alcoholic: !!m.alcoholic,
       notes: m.notes || '',
+      joinDate: m.joinDate || '',
+      planStartDate: profile.currentMembership?.startDate || m.joinDate || '',
+      expiryDate: m.expiryDate || '',
       emergencyName: m.emergencyContact?.name || '',
       emergencyPhone: m.emergencyContact?.phone || '',
       emergencyRelationship: m.emergencyContact?.relationship || '',
@@ -134,6 +140,9 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
         occupation: editForm.occupation || undefined,
         alcoholic: editForm.alcoholic,
         notes: editForm.notes.trim() || undefined,
+        joinDate: editForm.joinDate,
+        planStartDate: editForm.planStartDate || editForm.joinDate,
+        expiryDate: editForm.expiryDate,
         emergencyContact: {
           name: editForm.emergencyName,
           phone: editForm.emergencyPhone,
@@ -365,7 +374,8 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
               <h3 className="text-xs font-semibold text-zinc-500 uppercase mb-2">Current membership</h3>
               <div className="rounded-lg border border-zinc-800 p-3 space-y-1 text-sm">
                 <p className="font-medium">{profile.currentPlan?.name || m.planId}</p>
-                <p className="text-zinc-500 text-xs">{formatDate(m.joinDate)} → {formatDate(m.expiryDate)}</p>
+                <p className="text-zinc-500 text-xs">Joined {formatDate(m.joinDate)}</p>
+                <p className="text-zinc-500 text-xs">Plan {formatDate(profile.currentMembership?.startDate || m.joinDate)} → {formatDate(m.expiryDate)}</p>
                 <div className="flex gap-4 text-xs pt-1">
                   <span>Amount: {paymentExempt ? 'Free' : formatCurrency(profile.currentMembership?.amount || profile.currentPlan?.price || 0)}</span>
                   {!paymentExempt && (profile.currentMembership?.discount || 0) > 0 && (
@@ -448,6 +458,15 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
               <input required inputMode="numeric" placeholder="10-digit mobile" value={editForm.phone} onChange={e => { setEditForm({ ...editForm, phone: e.target.value }); setEditError(''); }} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
               <input placeholder="WhatsApp" value={editForm.whatsapp} onChange={e => setEditForm({ ...editForm, whatsapp: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
               <input type="date" placeholder="Date of birth" value={editForm.dateOfBirth} onChange={e => setEditForm({ ...editForm, dateOfBirth: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
+              <label className="block text-xs text-zinc-500">Joining date
+                <input type="date" value={editForm.joinDate} onChange={e => setEditForm({ ...editForm, joinDate: e.target.value })} className="mt-1 w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm text-white" />
+              </label>
+              <label className="block text-xs text-zinc-500">Plan start date
+                <input type="date" value={editForm.planStartDate} onChange={e => setEditForm({ ...editForm, planStartDate: e.target.value })} className="mt-1 w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm text-white" />
+              </label>
+              <label className="block text-xs text-zinc-500">Expiry date
+                <input type="date" value={editForm.expiryDate} onChange={e => setEditForm({ ...editForm, expiryDate: e.target.value })} className="mt-1 w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm text-white" />
+              </label>
               <textarea placeholder="Address" value={editForm.address} onChange={e => setEditForm({ ...editForm, address: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm resize-none" />
               <select value={editForm.membershipType} onChange={e => setEditForm({ ...editForm, membershipType: e.target.value as MembershipType })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm">
                 <option value="Paid">Paid member</option>

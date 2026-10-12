@@ -23,9 +23,24 @@ async function addLog(message: string) {
 }
 
 function addMonths(dateStr: string, months: number): string {
-  const d = new Date(dateStr);
+  const d = new Date(`${dateStr}T00:00:00`);
   d.setMonth(d.getMonth() + months);
-  return d.toISOString().split('T')[0];
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function parseIsoDate(raw: unknown): string | null {
+  const s = String(raw || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const d = new Date(`${s}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return null;
+  return s;
+}
+
+function todayIso(): string {
+  return parseIsoDate(new Date().toISOString().split('T')[0]) || new Date().toISOString().split('T')[0];
 }
 
 function planDurationMonths(duration: string): number {
@@ -128,9 +143,13 @@ router.post('/members', requirePermission('members', 'write'), async (req, res) 
 
   const password = body.password || '123456';
   const passwordHash = await bcrypt.hash(password, 10);
-  const joinDate = body.joinDate || new Date().toISOString().split('T')[0];
+  const joinDate = parseIsoDate(body.joinDate) || todayIso();
+  const planStartDate = parseIsoDate(body.planStartDate) || joinDate;
   const months = planDurationMonths(plan.duration);
-  const expiryDate = body.expiryDate || addMonths(joinDate, months);
+  const expiryDate = parseIsoDate(body.expiryDate) || addMonths(planStartDate, months);
+  const expiredAlready = expiryDate < todayIso();
+  const memberStatus = body.status || (expiredAlready ? 'Expired' : 'Active');
+  const membershipStatus = expiredAlready ? 'Expired' : 'Active';
   const paymentExempt = isPaymentExempt(membershipType);
   const planPrice = paymentExempt ? 0 : (plan.price || 0);
   const priced = applyDiscount(planPrice, body.discount);
@@ -162,7 +181,7 @@ router.post('/members', requirePermission('members', 'write'), async (req, res) 
           expiryDate,
           planId: plan.id,
           membershipType,
-          status: body.status || 'Active',
+          status: memberStatus,
           gender: profile.gender,
           occupation: profile.occupation,
           alcoholic: profile.alcoholic,
@@ -199,9 +218,9 @@ router.post('/members', requirePermission('members', 'write'), async (req, res) 
         data: {
           memberId: id,
           planId: plan.id,
-          startDate: joinDate,
+          startDate: planStartDate,
           endDate: expiryDate,
-          status: 'Active',
+          status: membershipStatus,
           amount: charged,
           paidAmount,
           discount,
@@ -216,7 +235,7 @@ router.post('/members', requirePermission('members', 'write'), async (req, res) 
             memberName: name,
             amount: paidAmount,
             expectedAmount: charged > paidAmount ? charged : undefined,
-            date: joinDate,
+            date: planStartDate,
             category: 'New Membership',
             paymentMethod: body.paymentMethod || 'Cash',
             status: paidAmount <= 0 ? 'Pending' : fullyPaid ? 'Completed' : 'Pending',
@@ -256,6 +275,12 @@ router.put('/members/:id', requirePermission('members', 'write'), async (req, re
   if (body.phone !== undefined && !isValidIndianPhone(String(body.phone || ''))) {
     return res.status(400).json({ error: 'Enter a valid 10-digit Indian mobile number' });
   }
+  const joinDate = body.joinDate !== undefined && body.joinDate !== '' ? parseIsoDate(body.joinDate) : undefined;
+  const expiryDate = body.expiryDate !== undefined && body.expiryDate !== '' ? parseIsoDate(body.expiryDate) : undefined;
+  const planStartDate = body.planStartDate !== undefined && body.planStartDate !== '' ? parseIsoDate(body.planStartDate) : undefined;
+  if (body.joinDate && !joinDate) return res.status(400).json({ error: 'Enter a valid joining date' });
+  if (body.expiryDate && !expiryDate) return res.status(400).json({ error: 'Enter a valid expiry date' });
+  if (body.planStartDate && !planStartDate) return res.status(400).json({ error: 'Enter a valid plan start date' });
   try {
   const updated = await prisma.member.update({
     where: { id },
@@ -267,8 +292,8 @@ router.put('/members/:id', requirePermission('members', 'write'), async (req, re
       dateOfBirth: body.dateOfBirth,
       address: body.address,
       photo: body.photo,
-      joinDate: body.joinDate,
-      expiryDate: body.expiryDate,
+      joinDate: joinDate ?? undefined,
+      expiryDate: expiryDate ?? undefined,
       planId: body.planId,
       membershipType: body.membershipType,
       status: body.status,
@@ -290,6 +315,22 @@ router.put('/members/:id', requirePermission('members', 'write'), async (req, re
       messages: body.messages,
     },
   });
+
+  if (planStartDate || expiryDate) {
+    const current = await prisma.membership.findFirst({
+      where: { memberId: id },
+      orderBy: { endDate: 'desc' },
+    });
+    if (current) {
+      await prisma.membership.update({
+        where: { id: current.id },
+        data: {
+          ...(planStartDate ? { startDate: planStartDate } : {}),
+          ...(expiryDate ? { endDate: expiryDate } : {}),
+        },
+      });
+    }
+  }
 
   const linkedUser = await prisma.user.findUnique({ where: { memberId: id } });
   if (linkedUser && (body.email || body.name)) {

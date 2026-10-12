@@ -2,6 +2,33 @@ import { Member, MemberDisplayStatus, Payment } from '../types';
 
 const EXPIRING_DAYS = 7;
 
+export function todayISO(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+export function addMonthsISO(dateStr: string, months: number): string {
+  const d = new Date(`${dateStr}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return dateStr;
+  d.setMonth(d.getMonth() + months);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+export function planDurationMonths(duration: string): number {
+  const m = duration.match(/(\d+)/);
+  if (!m) return 1;
+  const n = parseInt(m[1], 10);
+  if (/year|annual/i.test(duration)) return n * 12;
+  if (/month/i.test(duration)) return n;
+  return n;
+}
+
 export function daysUntil(dateStr: string): number {
   const target = new Date(dateStr);
   const now = new Date();

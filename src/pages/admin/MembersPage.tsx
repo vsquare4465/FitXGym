@@ -4,7 +4,7 @@ import { useGymData } from '../../context/GymDataProvider';
 import { Member, MembershipType, Payment, Plan } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { formatDate } from '../../lib/format';
-import { getMemberDisplayStatus } from '../../lib/memberUtils';
+import { addMonthsISO, getMemberDisplayStatus, planDurationMonths, todayISO } from '../../lib/memberUtils';
 import StatusBadge from '../../components/admin/StatusBadge';
 import MemberProfileDrawer from '../../components/admin/MemberProfileDrawer';
 import { adminApi } from '../../api/client';
@@ -29,6 +29,9 @@ const EMPTY_ADD = {
   alcoholic: false,
   weight: '',
   notes: '',
+  joinDate: todayISO(),
+  planStartDate: todayISO(),
+  expiryDate: '',
 };
 
 export default function MembersPage() {
@@ -55,6 +58,14 @@ export default function MembersPage() {
       setForm(f => ({ ...f, planId: selectedPlanId }));
     }
   }, [selectedPlanId, form.planId]);
+
+  useEffect(() => {
+    if (!selectedPlan) return;
+    const start = form.planStartDate || form.joinDate;
+    if (!start) return;
+    const expiry = addMonthsISO(start, planDurationMonths(selectedPlan.duration));
+    setForm(f => (f.expiryDate === expiry ? f : { ...f, expiryDate: expiry }));
+  }, [selectedPlanId, selectedPlan?.duration, form.joinDate, form.planStartDate]);
 
   const enriched = useMemo(() => {
     return (members as Member[]).map(m => ({
@@ -88,6 +99,10 @@ export default function MembersPage() {
     }
     if (!selectedPlanId) {
       setFormError('Pick a membership plan.');
+      return;
+    }
+    if (!form.joinDate) {
+      setFormError('Enter the joining date.');
       return;
     }
     if (!isValidEmail(form.email)) {
@@ -129,6 +144,9 @@ export default function MembersPage() {
         alcoholic: form.alcoholic,
         weight: form.weight.trim() || undefined,
         notes: form.notes.trim() || undefined,
+        joinDate: form.joinDate,
+        planStartDate: form.planStartDate || form.joinDate,
+        expiryDate: form.expiryDate,
       });
       setShowAdd(false);
       setForm({ ...EMPTY_ADD, planId: planList[0]?.id || '' });
@@ -161,7 +179,7 @@ export default function MembersPage() {
           <p className="text-sm text-zinc-500">{members.length} total · {filtered.length} shown</p>
         </div>
         {can('members', 'write') && (
-          <button type="button" onClick={() => setShowAdd(true)} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-orange-600 text-black text-sm font-semibold">
+          <button type="button" onClick={() => { const today = todayISO(); setForm({ ...EMPTY_ADD, planId: planList[0]?.id || '', joinDate: today, planStartDate: today }); setFormError(''); setShowAdd(true); }} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-orange-600 text-black text-sm font-semibold">
             <Plus size={16} /> Add member
           </button>
         )}
@@ -302,6 +320,16 @@ export default function MembersPage() {
               {!selectedPlanId && <option value="">Select a plan</option>}
               {planList.map(p => <option key={p.id} value={p.id}>{p.name} – ₹{p.price}</option>)}
             </select>
+            <p className="text-xs text-zinc-500">For past members, set the real joining and plan start dates. Expiry fills from the plan — change it if needed.</p>
+            <label className="block text-xs text-zinc-500">Joining date
+              <input type="date" value={form.joinDate} onChange={e => setForm({ ...form, joinDate: e.target.value, planStartDate: form.planStartDate === form.joinDate || !form.planStartDate ? e.target.value : form.planStartDate })} className="mt-1 w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm text-white" />
+            </label>
+            <label className="block text-xs text-zinc-500">Plan start date
+              <input type="date" value={form.planStartDate} onChange={e => setForm({ ...form, planStartDate: e.target.value })} className="mt-1 w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm text-white" />
+            </label>
+            <label className="block text-xs text-zinc-500">Expiry date
+              <input type="date" value={form.expiryDate} onChange={e => setForm({ ...form, expiryDate: e.target.value })} className="mt-1 w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm text-white" />
+            </label>
             {form.membershipType === 'Paid' && (
               <>
                 <input
