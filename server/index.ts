@@ -178,6 +178,9 @@ const server = app.listen(port, '0.0.0.0', () => {
     });
   } else {
     console.log(`API health: http://localhost:${port}/api/health`);
+    ensureProductionOwners().catch(err => {
+      console.error('Failed to ensure owner accounts:', err);
+    });
   }
 });
 

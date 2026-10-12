@@ -143,6 +143,8 @@ export default function TeamPage() {
 
   const previewPerms = resolvePermissions(form.role, permOverrides);
   const editingOwner = editing?.role === 'OWNER';
+  const ownerCount = team.filter(u => u.role === 'OWNER').length;
+  const selfId = user?.role === 'admin' ? user.id : null;
 
   return (
     <div className="p-4 md:p-6 max-w-5xl mx-auto pb-8">
@@ -151,7 +153,7 @@ export default function TeamPage() {
           <h1 className="text-xl font-bold flex items-center gap-2">
             <Shield size={20} className="text-orange-500" /> Team & access
           </h1>
-          <p className="text-sm text-zinc-500">Create and edit staff logins. Add a mobile number so they can request a password OTP by phone.</p>
+          <p className="text-sm text-zinc-500">One owner (Deepak Solanki). Add trainers, reception, and other staff here — they get their own login.</p>
         </div>
         {can('team', 'write') && (
           <button type="button" onClick={openAdd} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-orange-600 text-black text-sm font-semibold">
@@ -189,7 +191,7 @@ export default function TeamPage() {
                     Edit
                   </button>
                 )}
-                {u.role !== 'OWNER' && can('team', 'write') && user?.role === 'admin' && u.email !== user.email && (
+                {can('team', 'write') && user?.role === 'admin' && u.id !== selfId && (u.role !== 'OWNER' || (isOwnerActor && ownerCount > 1)) && (
                   <button type="button" onClick={() => handleDelete(u.id)} className="p-1.5 rounded-lg bg-red-500/10 text-red-400">
                     <Trash2 size={14} />
                   </button>

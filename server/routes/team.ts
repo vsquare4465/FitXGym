@@ -173,7 +173,13 @@ router.delete('/:id', requirePermission('team', 'write'), async (req, res) => {
     return res.status(404).json({ error: 'Team member not found' });
   }
   if (target.role === 'OWNER') {
-    return res.status(400).json({ error: 'Owner accounts cannot be deleted' });
+    if (req.user!.role !== 'OWNER') {
+      return res.status(403).json({ error: 'Only the owner can remove another owner login' });
+    }
+    const ownerCount = await prisma.user.count({ where: { role: 'OWNER' } });
+    if (ownerCount <= 1) {
+      return res.status(400).json({ error: 'The gym must keep one owner account' });
+    }
   }
 
   await prisma.user.delete({ where: { id } });

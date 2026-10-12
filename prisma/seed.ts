@@ -26,33 +26,37 @@ async function main() {
     console.log('Demo data skipped (SEED_DEMO_DATA is not true).');
   }
 
-  const owner1Email = process.env.SEED_OWNER1_EMAIL || 'owner1@fitxgym.com';
-  const owner1Pass = process.env.SEED_OWNER1_PASSWORD || 'FitXOwner1!';
-  const owner2Email = process.env.SEED_OWNER2_EMAIL || 'owner2@fitxgym.com';
-  const owner2Pass = process.env.SEED_OWNER2_PASSWORD || 'FitXOwner2!';
+  const ownerEmail = (process.env.SEED_OWNER1_EMAIL || 'owner1@fitxgym.com').trim().toLowerCase();
+  const ownerPass = process.env.SEED_OWNER1_PASSWORD || 'FitXOwner1!';
+  const ownerName = 'Deepak Solanki';
+  const ownerHash = await bcrypt.hash(ownerPass, 12);
 
-  const hash1 = await bcrypt.hash(owner1Pass, 12);
-  const hash2 = await bcrypt.hash(owner2Pass, 12);
+  const owners = await prisma.user.findMany({ where: { role: 'OWNER' }, orderBy: { createdAt: 'asc' } });
+  const keepExisting =
+    owners.find(o => /deepak\s+solanki/i.test(o.name)) ||
+    owners.find(o => /deepak/i.test(o.name)) ||
+    owners.find(o => o.email === ownerEmail) ||
+    owners[0];
 
-  // In production, create missing owners/plans only — never overwrite live passwords or prices.
-  async function upsertOwner(email: string, passwordHash: string, name: string) {
-    const existing = await prisma.user.findUnique({ where: { email } });
-    if (!existing) {
-      await prisma.user.create({
-        data: { email, passwordHash, name, role: 'OWNER' },
-      });
-      return;
-    }
-    if (!isProd) {
-      await prisma.user.update({
-        where: { email },
-        data: { passwordHash, name, role: 'OWNER' },
-      });
-    }
+  let keep = keepExisting;
+  if (!keep) {
+    keep = await prisma.user.create({
+      data: { email: ownerEmail, passwordHash: ownerHash, name: ownerName, role: 'OWNER' },
+    });
+  } else {
+    const data: { name: string; passwordHash?: string } = { name: ownerName };
+    if (!isProd && keep.email === ownerEmail) data.passwordHash = ownerHash;
+    await prisma.user.update({ where: { id: keep.id }, data });
   }
 
-  await upsertOwner(owner1Email, hash1, 'Gym Owner 1');
-  await upsertOwner(owner2Email, hash2, 'Gym Owner 2');
+  const extras = await prisma.user.findMany({
+    where: { role: 'OWNER', NOT: { id: keep.id } },
+    select: { id: true },
+  });
+  if (extras.length) {
+    await prisma.user.deleteMany({ where: { id: { in: extras.map(u => u.id) } } });
+    console.log(`Removed ${extras.length} extra owner login(s).`);
+  }
 
   for (const p of MEMBERSHIP_PLANS) {
     const existing = await prisma.plan.findUnique({ where: { id: p.id } });
@@ -330,8 +334,7 @@ async function main() {
   });
 
   console.log('Seed complete.');
-  console.log(`Owner 1: ${owner1Email} / (see SEED_OWNER1_PASSWORD in .env)`);
-  console.log(`Owner 2: ${owner2Email} / (see SEED_OWNER2_PASSWORD in .env)`);
+  console.log(`Owner: ${ownerName} <${ownerEmail}> (staff are added from Admin → Team)`);
 }
 
 main()
