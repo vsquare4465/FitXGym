@@ -21,6 +21,7 @@ import memberRoutes from './routes/member.js';
 import { prisma } from './db.js';
 import { distPath, getAllowedOrigins, isProd, port, validateProductionEnv } from './lib/config.js';
 import { ensureProductionOwners } from './lib/ensureOwner.js';
+import { otpEmailConfigured, otpWhatsappConfigured } from './lib/otpDelivery.js';
 
 
 
@@ -90,6 +91,8 @@ app.get('/api/health', async (_req, res) => {
     status: ok ? 'ok' : 'degraded',
     env: isProd ? 'production' : 'development',
     db,
+    otpEmail: otpEmailConfigured() ? 'ready' : 'missing',
+    otpWhatsapp: otpWhatsappConfigured() ? 'ready' : 'missing',
     time: new Date().toISOString(),
   });
 });

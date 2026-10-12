@@ -6,7 +6,7 @@ import { isAdminRole } from '../lib/permissions.js';
 import { rateLimit } from '../lib/rateLimit.js';
 import { createPasswordOtp, verifyAndConsumeOtp, OTP_EXPIRES_MINUTES } from '../lib/passwordOtp.js';
 import { isValidEmail, normalizeStaffPhone } from '../lib/validation.js';
-import { deliverPasswordOtp } from '../lib/otpDelivery.js';
+import { deliverPasswordOtp, otpNotConfiguredMessage } from '../lib/otpDelivery.js';
 
 const router = Router();
 const loginLimiter = rateLimit({
@@ -204,23 +204,35 @@ router.post('/request-otp', otpLimiter, async (req, res) => {
   }
 
   const user = await findAdminByEmailOrPhone(emailOrPhone);
-  if (user) {
-    const code = await createPasswordOtp(user.email);
-    await deliverPasswordOtp({
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      code,
-    });
-    await prisma.auditLog.create({
-      data: { message: `SECURITY: Password reset code requested for ${user.name}` },
+  if (!user) {
+    return res.json({
+      ok: true,
+      expiresInMinutes: OTP_EXPIRES_MINUTES,
+      message: 'If this account exists, a 6-digit code was sent.',
     });
   }
 
+  const code = await createPasswordOtp(user.email);
+  const sent = await deliverPasswordOtp({
+    name: user.name,
+    email: user.email,
+    phone: user.phone,
+    code,
+  });
+  await prisma.auditLog.create({
+    data: { message: `SECURITY: Password reset code requested for ${user.name}` },
+  });
+
+  if (sent.length === 0) {
+    return res.status(503).json({ error: otpNotConfiguredMessage() });
+  }
+
+  const via = sent.join(' and ');
   return res.json({
     ok: true,
+    sent,
     expiresInMinutes: OTP_EXPIRES_MINUTES,
-    message: 'If this account exists, a 6-digit code was sent to the email and WhatsApp on file.',
+    message: `Code sent by ${via}. Check inbox and spam. It expires in ${OTP_EXPIRES_MINUTES} minutes.`,
   });
 });
 

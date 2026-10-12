@@ -197,7 +197,7 @@ export default function AdminLoginPage() {
               </div>
             )}
             <p className="text-xs text-zinc-500">
-              Enter the email or mobile on your team profile. We email a 6-digit code from deepaksolanki@fitxgymkhurja.com. An owner can also generate a code from Team.
+              Enter the email or mobile on your team profile. The code is emailed from deepaksolanki@fitxgymkhurja.com and sent on WhatsApp if a mobile is saved. If send fails, use Team → Reset code.
             </p>
             <form onSubmit={handleSendOtp} className="space-y-3">
               <div>
