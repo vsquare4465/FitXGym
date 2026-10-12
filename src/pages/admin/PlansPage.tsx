@@ -1,10 +1,14 @@
 import { useState } from 'react';
-import { Plus, Check } from 'lucide-react';
+import { Plus, Check, Trash2 } from 'lucide-react';
 import { useGymData } from '../../context/GymDataProvider';
+import { useAuth } from '../../context/AuthContext';
+import { adminApi } from '../../api/client';
 import { Plan } from '../../types';
 
 export default function PlansPage() {
+  const { can } = useAuth();
   const { plans, setPlans } = useGymData();
+  const canWrite = can('plans', 'write');
   const list = plans as Plan[];
   const [editing, setEditing] = useState<Plan | null>(null);
 
@@ -21,6 +25,17 @@ export default function PlansPage() {
     const next = list.map(p => (p.id === plan.id ? { ...p, active: !p.active } : p));
     await setPlans(next);
   };
+
+  const handleDelete = async (plan: Plan) => {
+    if (!confirm(`Delete plan "${plan.name}"? Members already on this plan keep their membership.`)) return;
+    try {
+      await adminApi.deletePlan(plan.id);
+      await setPlans(list.filter(p => p.id !== plan.id));
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Could not delete plan');
+    }
+  };
+
 
   return (
     <div className="p-4 md:p-6 max-w-4xl mx-auto pb-8">
@@ -61,6 +76,11 @@ export default function PlansPage() {
                 <button type="button" onClick={() => toggleActive(plan)} className="px-3 py-1.5 rounded-lg bg-zinc-800 text-xs">
                   {plan.active !== false ? 'Deactivate' : 'Activate'}
                 </button>
+                {canWrite && (
+                  <button type="button" onClick={() => handleDelete(plan)} className="px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 text-xs inline-flex items-center gap-1">
+                    <Trash2 size={12} /> Delete
+                  </button>
+                )}
               </div>
             </div>
           </div>

@@ -1,5 +1,6 @@
 import { prisma } from '../db.js';
 import { resolveDateRange, inRange, daysUntil, monthKey, type DateRange } from './dateRange.js';
+import { istToday } from './ist.js';
 import { computeMemberDisplayStatus, memberHasPendingPayment } from './memberStatus.js';
 import { isPaymentExempt } from './permissions.js';
 import { toClientMember } from './memberMapper.js';
@@ -19,10 +20,10 @@ export async function buildDashboard(query: {
   to?: string;
 }) {
   const range = resolveDateRange(query.period || 'month', query.from, query.to);
-  const now = new Date();
-  const today = now.toISOString().split('T')[0];
-  const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-  const yearStart = `${now.getFullYear()}-01-01`;
+  const today = istToday();
+  const [year, month] = today.split('-');
+  const monthStart = `${year}-${month}-01`;
+  const yearStart = `${year}-01-01`;
 
   const [members, allPayments, allExpenses, attendance, memberships, auditLogs, plans] =
     await Promise.all([
@@ -97,8 +98,9 @@ export async function buildDashboard(query: {
   // Always show last 6 calendar months on charts (not limited to selected period)
   const sortedMonths: string[] = [];
   for (let i = 5; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    sortedMonths.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    const [y, m] = today.split('-').map(Number);
+    const d = new Date(Date.UTC(y, m - 1 - i, 1));
+    sortedMonths.push(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`);
   }
 
   const revenueTrend = sortedMonths.map(m => ({

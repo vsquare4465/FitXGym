@@ -4,6 +4,8 @@ import { X, MessageCircle, CreditCard, RefreshCw, UserCheck, Pencil, Bell, Trash
 import { adminApi } from '../../api/client';
 import { Member, MemberProfile, MembershipType, Plan } from '../../types';
 import { formatCurrency, formatDate } from '../../lib/format';
+import { addPlanDuration, daysUntil, todayISO } from '../../lib/memberUtils';
+import { formatAttendanceTime, istNowTime } from '../../lib/ist';
 import StatusBadge from './StatusBadge';
 import { fillTemplate, openWhatsApp, WHATSAPP_TEMPLATES } from '../../lib/whatsapp';
 import { isValidEmail, parseOptionalAmount, phoneValidationMessage } from '../../lib/validation';
@@ -26,6 +28,7 @@ const MEMBERSHIP_TYPE_LABELS: Record<MembershipType, string> = {
 export default function MemberProfileDrawer({ memberId, plans, gymName, onClose, onRefresh }: Props) {
   const { can } = useAuth();
   const canEdit = can('members', 'write');
+  const canDeletePayments = can('payments', 'write');
   const [profile, setProfile] = useState<MemberProfile | null>(null);
   const [loading, setLoading] = useState(false);
   const [showRenew, setShowRenew] = useState(false);
@@ -57,6 +60,7 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
     notes: '',
     joinDate: '',
     planStartDate: '',
+    planId: '',
     expiryDate: '',
     emergencyName: '',
     emergencyPhone: '',
@@ -77,6 +81,15 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
       .finally(() => setLoading(false));
   }, [memberId]);
 
+  useEffect(() => {
+    if (!showEdit) return;
+    const plan = plans.find(p => p.id === editForm.planId);
+    const start = editForm.planStartDate || editForm.joinDate;
+    if (!plan || !start) return;
+    const expiry = addPlanDuration(start, plan.duration);
+    setEditForm(f => (f.expiryDate === expiry ? f : { ...f, expiryDate: expiry }));
+  }, [showEdit, editForm.planId, editForm.planStartDate, editForm.joinDate, plans]);
+
   if (!memberId) return null;
 
   const m = profile?.member;
@@ -87,6 +100,8 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
   const renewPlan = plans.find(p => p.id === renewPlanId);
   const renewDisc = parseOptionalAmount(renewDiscount).value || 0;
   const renewCharged = Math.max(0, (renewPlan?.price || 0) - Math.min(renewDisc, renewPlan?.price || 0));
+  const renewFrom = m && daysUntil(m.expiryDate) >= 0 ? m.expiryDate : todayISO();
+  const renewExpiry = renewPlan ? addPlanDuration(renewFrom, renewPlan.duration) : '';
 
   const openEdit = () => {
     if (!m) return;
@@ -105,6 +120,7 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
       notes: m.notes || '',
       joinDate: m.joinDate || '',
       planStartDate: profile.currentMembership?.startDate || m.joinDate || '',
+      planId: m.planId || '',
       expiryDate: m.expiryDate || '',
       emergencyName: m.emergencyContact?.name || '',
       emergencyPhone: m.emergencyContact?.phone || '',
@@ -142,6 +158,7 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
         notes: editForm.notes.trim() || undefined,
         joinDate: editForm.joinDate,
         planStartDate: editForm.planStartDate || editForm.joinDate,
+        planId: editForm.planId || m.planId,
         expiryDate: editForm.expiryDate,
         emergencyContact: {
           name: editForm.emergencyName,
@@ -229,7 +246,7 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
         memberId: m.id,
         memberName: m.name,
         amount: parsed.value,
-        date: new Date().toISOString().split('T')[0],
+        date: todayISO(),
         category: 'Partial Payment',
         paymentMethod: payMethod,
         status: 'Completed',
@@ -249,9 +266,8 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
 
   const handleCheckIn = async () => {
     if (!m) return;
-    const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     try {
-      await adminApi.checkIn(m.id, now);
+      await adminApi.checkIn(m.id, istNowTime());
       onRefresh();
       await reload(memberId);
     } catch (e) {
@@ -268,6 +284,18 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
       onClose();
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Delete failed');
+    }
+  };
+
+  const handleDeletePayment = async (paymentId: string) => {
+    if (!memberId) return;
+    if (!confirm('Delete this payment? The member’s paid amount will be adjusted.')) return;
+    try {
+      await adminApi.deletePayment(paymentId);
+      onRefresh();
+      await reload(memberId);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Could not delete payment');
     }
   };
 
@@ -396,12 +424,12 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
             <section>
               <h3 className="text-xs font-semibold text-zinc-500 uppercase mb-2">Attendance</h3>
               <p className="text-sm">{profile.attendance.totalVisits} total visits</p>
-              <p className="text-xs text-zinc-500">Last visit: {profile.attendance.lastVisit ? `${formatDate(profile.attendance.lastVisit.date)} at ${profile.attendance.lastVisit.checkIn}` : 'Never'}</p>
+              <p className="text-xs text-zinc-500">Last visit: {profile.attendance.lastVisit ? `${formatDate(profile.attendance.lastVisit.date)} at ${formatAttendanceTime(profile.attendance.lastVisit.checkIn)}` : 'Never'}</p>
               <div className="mt-2 space-y-1">
                 {profile.attendance.recent.slice(0, 5).map(a => (
                   <div key={a.id} className="text-xs flex justify-between text-zinc-400">
                     <span>{formatDate(a.date)}</span>
-                    <span>{a.checkIn}{a.checkOut ? ` – ${a.checkOut}` : ' (in gym)'}</span>
+                    <span>{formatAttendanceTime(a.checkIn)}{a.checkOut ? ` – ${formatAttendanceTime(a.checkOut)}` : ' (in gym)'}</span>
                   </div>
                 ))}
               </div>
@@ -414,12 +442,24 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
               </div>
               <div className="space-y-2">
                 {profile.payments.slice(0, 8).map(p => (
-                  <div key={p.id} className="flex justify-between text-xs border-b border-zinc-800/50 pb-2">
+                  <div key={p.id} className="flex justify-between items-center gap-2 text-xs border-b border-zinc-800/50 pb-2">
                     <div>
                       <p>{p.category}</p>
                       <p className="text-zinc-500">{formatDate(p.date)} · {p.paymentMethod}</p>
                     </div>
-                    <p className="font-medium">{formatCurrency(p.amount)}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium">{formatCurrency(p.amount)}</p>
+                      {canDeletePayments && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeletePayment(p.id)}
+                          className="p-1 rounded bg-red-500/10 text-red-400"
+                          aria-label="Delete payment"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
                 {profile.payments.length === 0 && (
@@ -461,11 +501,16 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
               <label className="block text-xs text-zinc-500">Joining date
                 <input type="date" value={editForm.joinDate} onChange={e => setEditForm({ ...editForm, joinDate: e.target.value })} className="mt-1 w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm text-white" />
               </label>
+              <select value={editForm.planId} onChange={e => setEditForm({ ...editForm, planId: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm">
+                {plans.map(p => (
+                  <option key={p.id} value={p.id}>{p.name} · {p.duration}</option>
+                ))}
+              </select>
               <label className="block text-xs text-zinc-500">Plan start date
                 <input type="date" value={editForm.planStartDate} onChange={e => setEditForm({ ...editForm, planStartDate: e.target.value })} className="mt-1 w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm text-white" />
               </label>
-              <label className="block text-xs text-zinc-500">Expiry date
-                <input type="date" value={editForm.expiryDate} onChange={e => setEditForm({ ...editForm, expiryDate: e.target.value })} className="mt-1 w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm text-white" />
+              <label className="block text-xs text-zinc-500">Expiry date (from plan duration)
+                <input type="date" readOnly value={editForm.expiryDate} className="mt-1 w-full px-3 py-2 rounded-lg bg-zinc-950/70 border border-zinc-700 text-sm text-zinc-300" />
               </label>
               <textarea placeholder="Address" value={editForm.address} onChange={e => setEditForm({ ...editForm, address: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm resize-none" />
               <select value={editForm.membershipType} onChange={e => setEditForm({ ...editForm, membershipType: e.target.value as MembershipType })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm">
@@ -540,9 +585,12 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
               <h3 className="font-semibold">Renew membership</h3>
               <select value={renewPlanId} onChange={e => setRenewPlanId(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm">
                 {plans.filter(p => p.active !== false).map(p => (
-                  <option key={p.id} value={p.id}>{p.name} – ₹{p.price}</option>
+                  <option key={p.id} value={p.id}>{p.name} · {p.duration} – ₹{p.price}</option>
                 ))}
               </select>
+              {renewExpiry && (
+                <p className="text-xs text-zinc-500">New expiry: {formatDate(renewExpiry)} ({renewPlan?.duration})</p>
+              )}
               {!paymentExempt && (
                 <>
                   <input type="text" inputMode="decimal" placeholder="Discount (optional)" value={renewDiscount} onChange={e => { setRenewDiscount(e.target.value); setActionError(''); }} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />

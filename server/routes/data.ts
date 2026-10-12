@@ -9,26 +9,19 @@ import { nextMemberId } from '../lib/memberId.js';
 import { isValidEmail, isValidIndianPhone, parseRupees } from '../lib/validation.js';
 import { normalizeWhatsAppNumber } from '../lib/whatsapp.js';
 import { daysUntil } from '../lib/dateRange.js';
+import { istNowTime, istToday, minutesBetweenIst } from '../lib/ist.js';
+import { addPlanDuration } from '../lib/planDates.js';
 
 const router = Router();
 router.use(authMiddleware);
 router.use(requireAdmin());
 
 function formatAuditTime() {
-  return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  return istNowTime(new Date(), true);
 }
 
 async function addLog(message: string) {
   await prisma.auditLog.create({ data: { message: `[${formatAuditTime()}] ${message}` } });
-}
-
-function addMonths(dateStr: string, months: number): string {
-  const d = new Date(`${dateStr}T00:00:00`);
-  d.setMonth(d.getMonth() + months);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
 }
 
 function parseIsoDate(raw: unknown): string | null {
@@ -40,16 +33,7 @@ function parseIsoDate(raw: unknown): string | null {
 }
 
 function todayIso(): string {
-  return parseIsoDate(new Date().toISOString().split('T')[0]) || new Date().toISOString().split('T')[0];
-}
-
-function planDurationMonths(duration: string): number {
-  const m = duration.match(/(\d+)/);
-  if (!m) return 1;
-  const n = parseInt(m[1], 10);
-  if (/year|annual|12/i.test(duration)) return n * 12;
-  if (/month/i.test(duration)) return n;
-  return n;
+  return istToday();
 }
 
 // --- Dashboard ---
@@ -145,8 +129,7 @@ router.post('/members', requirePermission('members', 'write'), async (req, res) 
   const passwordHash = await bcrypt.hash(password, 10);
   const joinDate = parseIsoDate(body.joinDate) || todayIso();
   const planStartDate = parseIsoDate(body.planStartDate) || joinDate;
-  const months = planDurationMonths(plan.duration);
-  const expiryDate = parseIsoDate(body.expiryDate) || addMonths(planStartDate, months);
+  const expiryDate = addPlanDuration(planStartDate, plan.duration);
   const expiredAlready = expiryDate < todayIso();
   const memberStatus = body.status || (expiredAlready ? 'Expired' : 'Active');
   const membershipStatus = expiredAlready ? 'Expired' : 'Active';
@@ -276,12 +259,25 @@ router.put('/members/:id', requirePermission('members', 'write'), async (req, re
     return res.status(400).json({ error: 'Enter a valid 10-digit Indian mobile number' });
   }
   const joinDate = body.joinDate !== undefined && body.joinDate !== '' ? parseIsoDate(body.joinDate) : undefined;
-  const expiryDate = body.expiryDate !== undefined && body.expiryDate !== '' ? parseIsoDate(body.expiryDate) : undefined;
   const planStartDate = body.planStartDate !== undefined && body.planStartDate !== '' ? parseIsoDate(body.planStartDate) : undefined;
   if (body.joinDate && !joinDate) return res.status(400).json({ error: 'Enter a valid joining date' });
-  if (body.expiryDate && !expiryDate) return res.status(400).json({ error: 'Enter a valid expiry date' });
   if (body.planStartDate && !planStartDate) return res.status(400).json({ error: 'Enter a valid plan start date' });
   try {
+  const existing = await prisma.member.findUnique({ where: { id } });
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+
+  const nextPlanId = body.planId || existing.planId;
+  let nextExpiry: string | undefined;
+  if (body.planId || planStartDate) {
+    const plan = await prisma.plan.findUnique({ where: { id: nextPlanId } });
+    const currentMs = await prisma.membership.findFirst({
+      where: { memberId: id },
+      orderBy: { endDate: 'desc' },
+    });
+    const start = planStartDate || currentMs?.startDate || existing.joinDate;
+    if (plan) nextExpiry = addPlanDuration(start, plan.duration);
+  }
+
   const updated = await prisma.member.update({
     where: { id },
     data: {
@@ -293,7 +289,7 @@ router.put('/members/:id', requirePermission('members', 'write'), async (req, re
       address: body.address,
       photo: body.photo,
       joinDate: joinDate ?? undefined,
-      expiryDate: expiryDate ?? undefined,
+      expiryDate: nextExpiry ?? undefined,
       planId: body.planId,
       membershipType: body.membershipType,
       status: body.status,
@@ -316,7 +312,7 @@ router.put('/members/:id', requirePermission('members', 'write'), async (req, re
     },
   });
 
-  if (planStartDate || expiryDate) {
+  if (planStartDate || nextExpiry || body.planId) {
     const current = await prisma.membership.findFirst({
       where: { memberId: id },
       orderBy: { endDate: 'desc' },
@@ -325,8 +321,9 @@ router.put('/members/:id', requirePermission('members', 'write'), async (req, re
       await prisma.membership.update({
         where: { id: current.id },
         data: {
+          ...(body.planId ? { planId: nextPlanId } : {}),
           ...(planStartDate ? { startDate: planStartDate } : {}),
-          ...(expiryDate ? { endDate: expiryDate } : {}),
+          ...(nextExpiry ? { endDate: nextExpiry } : {}),
         },
       });
     }
@@ -376,10 +373,9 @@ router.post('/members/:id/renew', requirePermission('members', 'write'), async (
     return res.status(400).json({ error: 'Enter a valid amount, or choose Pay later' });
   }
 
-  const startDate = new Date().toISOString().split('T')[0];
-  const months = planDurationMonths(plan.duration);
+  const startDate = todayIso();
   const base = daysUntil(member.expiryDate) >= 0 ? member.expiryDate : startDate;
-  const endDate = addMonths(base, months);
+  const endDate = addPlanDuration(base, plan.duration);
   const paymentExempt = isPaymentExempt(member.membershipType);
   const planPrice = paymentExempt ? 0 : plan.price;
   const priced = applyDiscount(planPrice, req.body.discount);
@@ -477,6 +473,14 @@ router.put('/plans', requirePermission('plans', 'write'), async (req, res) => {
   res.json(plans);
 });
 
+router.delete('/plans/:id', requirePermission('plans', 'write'), async (req, res) => {
+  const existing = await prisma.plan.findUnique({ where: { id: req.params.id } });
+  if (!existing) return res.status(404).json({ error: 'Plan not found' });
+  await prisma.plan.delete({ where: { id: existing.id } });
+  await addLog(`PLAN: Deleted ${existing.name}`);
+  res.json({ ok: true });
+});
+
 // --- Payments ---
 router.get('/payments', requirePermission('payments', 'read'), async (_req, res) => {
   res.json(await prisma.payment.findMany({ orderBy: { createdAt: 'desc' } }));
@@ -501,7 +505,7 @@ router.post('/payments', requirePermission('payments', 'write'), async (req, res
         memberId: member.id,
         memberName: p.memberName || member.name,
         amount,
-        date: p.date || new Date().toISOString().split('T')[0],
+        date: p.date || todayIso(),
         category: p.category || 'Partial Payment',
         paymentMethod: p.paymentMethod || 'Cash',
         status,
@@ -535,6 +539,32 @@ router.put('/payments/:id', requirePermission('payments', 'write'), async (req, 
   res.json(updated);
 });
 
+router.delete('/payments/:id', requirePermission('payments', 'write'), async (req, res) => {
+  try {
+    const existing = await prisma.$transaction(async (tx) => {
+      const row = await tx.payment.findUnique({ where: { id: req.params.id } });
+      if (!row) return null;
+      await tx.payment.delete({ where: { id: row.id } });
+      if (row.membershipId && row.amount > 0) {
+        const ms = await tx.membership.findUnique({ where: { id: row.membershipId } });
+        if (ms) {
+          await tx.membership.update({
+            where: { id: ms.id },
+            data: { paidAmount: Math.max(0, ms.paidAmount - row.amount) },
+          });
+        }
+      }
+      return row;
+    });
+    if (!existing) return res.status(404).json({ error: 'Payment not found' });
+    await addLog(`PAYMENT: Deleted Rs.${existing.amount} (${existing.memberName})`);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Could not delete payment. Try again.' });
+  }
+});
+
 // --- Expenses ---
 router.get('/expenses', requirePermission('expenses', 'read'), async (_req, res) => {
   res.json(await prisma.expense.findMany({ orderBy: { date: 'desc' } }));
@@ -559,6 +589,14 @@ router.put('/expenses', requirePermission('expenses', 'write'), async (req, res)
   res.json(expenses);
 });
 
+router.delete('/expenses/:id', requirePermission('expenses', 'write'), async (req, res) => {
+  const existing = await prisma.expense.findUnique({ where: { id: req.params.id } });
+  if (!existing) return res.status(404).json({ error: 'Expense not found' });
+  await prisma.expense.delete({ where: { id: existing.id } });
+  await addLog(`FINANCE: Deleted expense ${existing.category} Rs.${existing.amount}`);
+  res.json({ ok: true });
+});
+
 // --- Attendance ---
 router.get('/attendance', requirePermission('attendance', 'read'), async (req, res) => {
   const { date, memberId } = req.query;
@@ -569,14 +607,15 @@ router.get('/attendance', requirePermission('attendance', 'read'), async (req, r
 });
 
 router.post('/attendance/checkin', requirePermission('attendance', 'write'), async (req, res) => {
-  const { memberId, timestamp } = req.body;
+  const { memberId } = req.body;
   const member = await prisma.member.findUnique({ where: { id: memberId } });
   if (!member) return res.status(404).json({ error: 'Member not found' });
   if (member.status === 'Expired' || member.status === 'Frozen') {
     return res.status(403).json({ error: 'Membership not active' });
   }
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = istToday();
+  const checkIn = istNowTime();
   const open = await prisma.attendanceRecord.findFirst({
     where: { memberId, date: today, checkOut: null },
   });
@@ -585,26 +624,28 @@ router.post('/attendance/checkin', requirePermission('attendance', 'write'), asy
   const record = await prisma.attendanceRecord.create({
     data: {
       memberId, memberName: member.name, photo: member.photo,
-      role: 'Member', date: today, checkIn: timestamp, status: 'On Time',
+      role: 'Member', date: today, checkIn, status: 'On Time',
     },
   });
-  await addLog(`ATTENDANCE: ${member.name} checked in at ${timestamp}`);
+  await addLog(`ATTENDANCE: ${member.name} checked in at ${checkIn} IST`);
   res.json(record);
 });
 
 router.post('/attendance/checkout', requirePermission('attendance', 'write'), async (req, res) => {
-  const { memberId, timestamp, duration } = req.body;
-  const today = new Date().toISOString().split('T')[0];
+  const { memberId } = req.body;
+  const today = istToday();
+  const checkOut = istNowTime();
   const open = await prisma.attendanceRecord.findFirst({
     where: { memberId, date: today, checkOut: null },
   });
   if (!open) return res.status(404).json({ error: 'No open check-in' });
 
+  const duration = minutesBetweenIst(open.date, open.checkIn);
   const updated = await prisma.attendanceRecord.update({
     where: { id: open.id },
-    data: { checkOut: timestamp, duration },
+    data: { checkOut, duration },
   });
-  await addLog(`ATTENDANCE: ${open.memberName} checked out (${duration} min)`);
+  await addLog(`ATTENDANCE: ${open.memberName} checked out at ${checkOut} IST (${duration} min)`);
   res.json(updated);
 });
 
@@ -614,6 +655,14 @@ router.put('/attendance/:id', requirePermission('attendance', 'write'), async (r
     data: req.body,
   });
   res.json(updated);
+});
+
+router.delete('/attendance/:id', requirePermission('attendance', 'write'), async (req, res) => {
+  const existing = await prisma.attendanceRecord.findUnique({ where: { id: req.params.id } });
+  if (!existing) return res.status(404).json({ error: 'Attendance record not found' });
+  await prisma.attendanceRecord.delete({ where: { id: existing.id } });
+  await addLog(`ATTENDANCE: Deleted ${existing.memberName} ${existing.date} ${existing.checkIn}`);
+  res.json({ ok: true });
 });
 
 // --- Leads ---
@@ -626,6 +675,14 @@ router.patch('/leads/:id', requirePermission('leads', 'write'), async (req, res)
   res.json(updated);
 });
 
+router.delete('/leads/:id', requirePermission('leads', 'write'), async (req, res) => {
+  const existing = await prisma.lead.findUnique({ where: { id: req.params.id } });
+  if (!existing) return res.status(404).json({ error: 'Lead not found' });
+  await prisma.lead.delete({ where: { id: existing.id } });
+  await addLog(`LEAD: Deleted enquiry from ${existing.name}`);
+  res.json({ ok: true });
+});
+
 router.post('/leads/:id/convert', requirePermission('leads', 'write'), async (req, res) => {
   const lead = await prisma.lead.findUnique({ where: { id: req.params.id } });
   if (!lead) return res.status(404).json({ error: 'Lead not found' });
@@ -633,9 +690,8 @@ router.post('/leads/:id/convert', requirePermission('leads', 'write'), async (re
   const planId = req.body.planId || 'plan_monthly';
   const plan = await prisma.plan.findUnique({ where: { id: planId } });
   const id = await nextMemberId();
-  const joinDate = new Date().toISOString().split('T')[0];
-  const months = plan ? planDurationMonths(plan.duration) : 1;
-  const expiryDate = addMonths(joinDate, months);
+  const joinDate = todayIso();
+  const expiryDate = plan ? addPlanDuration(joinDate, plan.duration) : addPlanDuration(joinDate, '1 Month');
   const passwordHash = await bcrypt.hash('123456', 10);
   const email = lead.email || `${lead.phone}@fitxgym.local`;
 

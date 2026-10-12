@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { MessageCircle, Phone, UserPlus } from 'lucide-react';
+import { MessageCircle, Phone, Trash2, UserPlus } from 'lucide-react';
 import { adminApi } from '../../api/client';
+import { useAuth } from '../../context/AuthContext';
 import { Lead } from '../../types';
 import { formatDate } from '../../lib/format';
 import { openWhatsApp } from '../../lib/whatsapp';
@@ -8,6 +9,8 @@ import { openWhatsApp } from '../../lib/whatsapp';
 const STATUSES = ['New', 'Contacted', 'Interested', 'Follow Up', 'Converted', 'Not Interested'];
 
 export default function LeadsPage() {
+  const { can } = useAuth();
+  const canWrite = can('leads', 'write');
   const [leads, setLeads] = useState<Lead[]>([]);
   const [filter, setFilter] = useState('all');
   const [notesEdit, setNotesEdit] = useState<string | null>(null);
@@ -33,6 +36,16 @@ export default function LeadsPage() {
     if (!confirm('Convert this lead to a member? Default password will be 123456')) return;
     await adminApi.convertLead(id);
     load();
+  };
+
+  const handleDelete = async (lead: Lead) => {
+    if (!confirm(`Delete enquiry from ${lead.name}?`)) return;
+    try {
+      await adminApi.deleteLead(lead.id);
+      load();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Could not delete lead');
+    }
   };
 
   return (
@@ -79,6 +92,9 @@ export default function LeadsPage() {
                 <button type="button" onClick={() => { setNotesEdit(lead.id); setNotes(lead.notes || ''); }} className="px-3 py-1.5 rounded-lg bg-zinc-800 text-xs">Notes</button>
                 {lead.status !== 'Converted' && (
                   <button type="button" onClick={() => convert(lead.id)} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-orange-600/20 text-orange-400 text-xs"><UserPlus size={14} /> Convert to member</button>
+                )}
+                {canWrite && (
+                  <button type="button" onClick={() => handleDelete(lead)} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 text-xs"><Trash2 size={14} /> Delete</button>
                 )}
               </div>
             )}

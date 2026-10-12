@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, Search } from 'lucide-react';
+import { Plus, Search, Trash2 } from 'lucide-react';
 import { useGymData } from '../../context/GymDataProvider';
+import { useAuth } from '../../context/AuthContext';
+import { adminApi } from '../../api/client';
 import { Member, Payment, Plan } from '../../types';
 import { formatCurrency, formatDate } from '../../lib/format';
 import { parseOptionalAmount } from '../../lib/validation';
@@ -15,6 +17,8 @@ const METHODS = ['Cash', 'UPI', 'Bank Transfer', 'Card', 'Other'];
 type PayType = 'paid' | 'partial' | 'not_paid';
 
 export default function PaymentsPage() {
+  const { can } = useAuth();
+  const canWrite = can('payments', 'write');
   const [searchParams] = useSearchParams();
   const { payments, members, plans, onAddPayment, refresh } = useGymData();
   const list = payments as Payment[];
@@ -113,6 +117,16 @@ export default function PaymentsPage() {
     return p.status;
   };
 
+  const handleDelete = async (p: Payment) => {
+    if (!confirm(`Delete this payment for ${p.memberName}?`)) return;
+    try {
+      await adminApi.deletePayment(p.id);
+      refresh();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Could not delete payment');
+    }
+  };
+
   return (
     <div className="p-4 md:p-6 max-w-5xl mx-auto pb-8">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -177,12 +191,19 @@ export default function PaymentsPage() {
               )}
               {p.notes && <p className="text-xs text-zinc-600">{p.notes}</p>}
             </div>
-            <div className="text-right">
-              <p className="font-bold">{p.amount === 0 ? '—' : formatCurrency(p.amount)}</p>
-              <span className={`text-[10px] font-semibold ${
-                displayStatus(p) === 'Completed' ? 'text-emerald-400' :
-                displayStatus(p) === 'Not Paid' ? 'text-red-400' : 'text-orange-400'
-              }`}>{displayStatus(p)}</span>
+            <div className="flex items-center gap-3 self-start sm:self-center">
+              <div className="text-right">
+                <p className="font-bold">{p.amount === 0 ? '—' : formatCurrency(p.amount)}</p>
+                <span className={`text-[10px] font-semibold ${
+                  displayStatus(p) === 'Completed' ? 'text-emerald-400' :
+                  displayStatus(p) === 'Not Paid' ? 'text-red-400' : 'text-orange-400'
+                }`}>{displayStatus(p)}</span>
+              </div>
+              {canWrite && (
+                <button type="button" onClick={() => handleDelete(p)} className="p-2 rounded-lg bg-red-500/10 text-red-400" aria-label="Delete payment">
+                  <Trash2 size={14} />
+                </button>
+              )}
             </div>
           </div>
         ))}

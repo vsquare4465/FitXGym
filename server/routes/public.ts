@@ -5,6 +5,8 @@ import { toClientMember } from '../lib/memberMapper.js';
 import { rateLimit } from '../lib/rateLimit.js';
 import { nextMemberId } from '../lib/memberId.js';
 import { isValidEmail, isValidIndianPhone } from '../lib/validation.js';
+import { istNowTime, istToday, minutesBetweenIst } from '../lib/ist.js';
+import { addPlanDuration } from '../lib/planDates.js';
 
 const router = Router();
 const formLimiter = rateLimit({ windowMs: 60 * 1000, max: 10, message: 'Too many submissions. Please wait a minute.' });
@@ -106,6 +108,9 @@ router.post('/register', async (req, res) => {
 
   const id = await nextMemberId();
   const passwordHash = await bcrypt.hash(member.password || '123456', 10);
+  const plan = member.planId ? await prisma.plan.findUnique({ where: { id: member.planId } }) : null;
+  const joinDate = member.joinDate || istToday();
+  const expiryDate = plan ? addPlanDuration(joinDate, plan.duration) : (member.expiryDate || addPlanDuration(joinDate, '1 Month'));
 
   const created = await prisma.member.create({
     data: {
@@ -116,8 +121,8 @@ router.post('/register', async (req, res) => {
       whatsapp: member.whatsapp || member.phone,
       passwordHash,
       photo: member.photo || '',
-      joinDate: member.joinDate,
-      expiryDate: member.expiryDate,
+      joinDate,
+      expiryDate,
       planId: member.planId,
       status: member.status,
       emergencyContact: member.emergencyContact ?? {},
@@ -148,8 +153,8 @@ router.post('/register', async (req, res) => {
     data: {
       memberId: created.id,
       planId: member.planId,
-      startDate: member.joinDate,
-      endDate: member.expiryDate,
+      startDate: joinDate,
+      endDate: expiryDate,
       status: member.status,
       amount: planPrice || 0,
       paidAmount: planPrice || 0,
@@ -162,7 +167,7 @@ router.post('/register', async (req, res) => {
         memberId: created.id,
         memberName: created.name,
         amount: planPrice,
-        date: new Date().toISOString().split('T')[0],
+        date: istToday(),
         category: 'New Membership',
         paymentMethod: paymentMethod ?? 'UPI',
         status: 'Completed',
@@ -199,7 +204,7 @@ router.get('/checkin-status', async (req, res) => {
   const member = await prisma.member.findUnique({ where: { id: memberId } });
   if (!member) return res.status(404).json({ error: 'Member not found' });
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = istToday();
   const open = await prisma.attendanceRecord.findFirst({
     where: { memberId, date: today, checkOut: null },
   });
@@ -235,8 +240,8 @@ router.post('/checkin', checkinLimiter, async (req, res) => {
     return res.status(403).json({ error: 'Membership is not active. Please contact the front desk.' });
   }
 
-  const today = new Date().toISOString().split('T')[0];
-  const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const today = istToday();
+  const now = istNowTime();
 
   if (action === 'out') {
     const open = await prisma.attendanceRecord.findFirst({
@@ -244,8 +249,7 @@ router.post('/checkin', checkinLimiter, async (req, res) => {
     });
     if (!open) return res.status(404).json({ error: 'No active check-in found for today' });
 
-    const checkInDate = new Date(`${today} ${open.checkIn}`);
-    const duration = Math.max(1, Math.round((Date.now() - checkInDate.getTime()) / 60000));
+    const duration = minutesBetweenIst(open.date, open.checkIn);
 
     const updated = await prisma.attendanceRecord.update({
       where: { id: open.id },

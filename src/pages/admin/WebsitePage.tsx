@@ -143,7 +143,7 @@ const TEXT_FIELDS = [
 ];
 
 export default function WebsitePage() {
-  const { settings, onUpdateSettings, gallery, onUpdateGallery, plans, testimonials, refresh } = useGymData();
+  const { settings, onUpdateSettings, gallery, onUpdateGallery, plans, testimonials, onApproveTestimonial, onDeleteTestimonial, refresh } = useGymData();
   const [form, setForm] = useState<Record<string, string>>({});
   const [gal, setGal] = useState<GalleryImage[]>([]);
   const [draftSaved, setDraftSaved] = useState(false);
@@ -407,6 +407,46 @@ export default function WebsitePage() {
           <Upload size={16} /> Add images (multiple)
           <input type="file" accept="image/*" multiple className="hidden" onChange={addGalleryImages} />
         </label>
+      </section>
+
+      <section>
+        <h2 className="text-sm font-semibold text-zinc-400 uppercase mb-3">Testimonials</h2>
+        {(testimonials as Review[]).length === 0 ? (
+          <p className="text-xs text-zinc-500">No reviews yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {(testimonials as Review[]).map(t => (
+              <div key={t.id} className="rounded-lg border border-zinc-800 p-3 flex justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium">{t.name} · {t.rating}/5 {t.approved ? '' : '· Pending'}</p>
+                  <p className="text-xs text-zinc-400 mt-1">{t.text}</p>
+                </div>
+                <div className="flex items-start gap-1">
+                  {!t.approved && (
+                    <button type="button" onClick={() => onApproveTestimonial(t.id)} className="px-2 py-1 rounded bg-zinc-800 text-xs">
+                      Approve
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!confirm(`Delete review from ${t.name}?`)) return;
+                      try {
+                        await onDeleteTestimonial(t.id);
+                      } catch (err) {
+                        alert(err instanceof Error ? err.message : 'Could not delete review');
+                      }
+                    }}
+                    className="p-1.5 rounded bg-red-500/10 text-red-400"
+                    aria-label="Delete review"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       <section>

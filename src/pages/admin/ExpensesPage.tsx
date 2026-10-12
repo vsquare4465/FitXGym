@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { useGymData } from '../../context/GymDataProvider';
+import { useAuth } from '../../context/AuthContext';
+import { adminApi } from '../../api/client';
 import { Expense } from '../../types';
 import { formatCurrency, formatDate } from '../../lib/format';
 import TrendChart from '../../components/admin/TrendChart';
@@ -11,6 +13,8 @@ const CATEGORIES = [
 ];
 
 export default function ExpensesPage() {
+  const { can } = useAuth();
+  const canWrite = can('expenses', 'write');
   const { expenses, onAddExpense, refresh } = useGymData();
   const list = expenses as Expense[];
   const [showForm, setShowForm] = useState(false);
@@ -112,6 +116,16 @@ export default function ExpensesPage() {
     refresh();
   };
 
+  const handleDelete = async (e: Expense) => {
+    if (!confirm(`Delete this ${e.category} expense of ${formatCurrency(e.amount)}?`)) return;
+    try {
+      await adminApi.deleteExpense(e.id);
+      refresh();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Could not delete expense');
+    }
+  };
+
   return (
     <div className="p-4 md:p-6 max-w-5xl mx-auto pb-8">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -208,7 +222,14 @@ export default function ExpensesPage() {
                   <p className="text-sm text-zinc-400">{e.description}</p>
                   <p className="text-xs text-zinc-500 mt-1">{formatDate(e.date)} · {e.paymentMethod}{e.vendor ? ` · ${e.vendor}` : ''}</p>
                 </div>
-                <p className="font-bold text-red-400">{formatCurrency(e.amount)}</p>
+                <div className="flex items-start gap-2">
+                  <p className="font-bold text-red-400">{formatCurrency(e.amount)}</p>
+                  {canWrite && (
+                    <button type="button" onClick={() => handleDelete(e)} className="p-2 rounded-lg bg-red-500/10 text-red-400" aria-label="Delete expense">
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>

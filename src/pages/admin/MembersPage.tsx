@@ -4,7 +4,7 @@ import { useGymData } from '../../context/GymDataProvider';
 import { Member, MembershipType, Payment, Plan } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { formatDate } from '../../lib/format';
-import { addMonthsISO, getMemberDisplayStatus, planDurationMonths, todayISO } from '../../lib/memberUtils';
+import { addPlanDuration, getMemberDisplayStatus, todayISO } from '../../lib/memberUtils';
 import StatusBadge from '../../components/admin/StatusBadge';
 import MemberProfileDrawer from '../../components/admin/MemberProfileDrawer';
 import { adminApi } from '../../api/client';
@@ -63,7 +63,7 @@ export default function MembersPage() {
     if (!selectedPlan) return;
     const start = form.planStartDate || form.joinDate;
     if (!start) return;
-    const expiry = addMonthsISO(start, planDurationMonths(selectedPlan.duration));
+    const expiry = addPlanDuration(start, selectedPlan.duration);
     setForm(f => (f.expiryDate === expiry ? f : { ...f, expiryDate: expiry }));
   }, [selectedPlanId, selectedPlan?.duration, form.joinDate, form.planStartDate]);
 
@@ -320,15 +320,15 @@ export default function MembersPage() {
               {!selectedPlanId && <option value="">Select a plan</option>}
               {planList.map(p => <option key={p.id} value={p.id}>{p.name} – ₹{p.price}</option>)}
             </select>
-            <p className="text-xs text-zinc-500">For past members, set the real joining and plan start dates. Expiry fills from the plan — change it if needed.</p>
+            <p className="text-xs text-zinc-500">For past members, set the real joining and plan start dates. Expiry is calculated from the plan duration.</p>
             <label className="block text-xs text-zinc-500">Joining date
               <input type="date" value={form.joinDate} onChange={e => setForm({ ...form, joinDate: e.target.value, planStartDate: form.planStartDate === form.joinDate || !form.planStartDate ? e.target.value : form.planStartDate })} className="mt-1 w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm text-white" />
             </label>
             <label className="block text-xs text-zinc-500">Plan start date
               <input type="date" value={form.planStartDate} onChange={e => setForm({ ...form, planStartDate: e.target.value })} className="mt-1 w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm text-white" />
             </label>
-            <label className="block text-xs text-zinc-500">Expiry date
-              <input type="date" value={form.expiryDate} onChange={e => setForm({ ...form, expiryDate: e.target.value })} className="mt-1 w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm text-white" />
+            <label className="block text-xs text-zinc-500">Expiry date (from {selectedPlan?.duration || 'plan'})
+              <input type="date" readOnly value={form.expiryDate} className="mt-1 w-full px-3 py-2 rounded-lg bg-zinc-950/70 border border-zinc-700 text-sm text-zinc-300" />
             </label>
             {form.membershipType === 'Paid' && (
               <>

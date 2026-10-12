@@ -1,3 +1,5 @@
+import { istToday } from './ist.js';
+
 export type DatePeriod = 'today' | 'week' | 'month' | 'year' | 'all' | 'custom';
 
 export interface DateRange {
@@ -7,7 +9,7 @@ export interface DateRange {
 }
 
 function toDateStr(d: Date): string {
-  return d.toISOString().split('T')[0];
+  return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 }
 
 export function resolveDateRange(
@@ -59,11 +61,11 @@ export function inRange(dateStr: string, range: DateRange): boolean {
 }
 
 export function daysUntil(dateStr: string): number {
-  const target = new Date(dateStr);
-  const now = new Date();
-  now.setHours(0, 0, 0, 0);
-  target.setHours(0, 0, 0, 0);
-  return Math.ceil((target.getTime() - now.getTime()) / 86400000);
+  const today = istToday();
+  const target = Date.parse(`${dateStr.slice(0, 10)}T00:00:00+05:30`);
+  const now = Date.parse(`${today}T00:00:00+05:30`);
+  if (Number.isNaN(target) || Number.isNaN(now)) return 0;
+  return Math.round((target - now) / 86400000);
 }
 
 export function monthKey(dateStr: string): string {

@@ -2,6 +2,9 @@ import { Router } from 'express';
 import { prisma } from '../db.js';
 import { authMiddleware, requireRole } from '../middleware/auth.js';
 import { toClientMember } from '../lib/memberMapper.js';
+import { istToday } from '../lib/ist.js';
+import { addPlanDuration } from '../lib/planDates.js';
+import { daysUntil } from '../lib/dateRange.js';
 
 const router = Router();
 router.use(authMiddleware);
@@ -45,16 +48,10 @@ router.post('/renew', async (req, res) => {
   const member = await prisma.member.findUnique({ where: { id: memberId } });
   if (!member) return res.status(404).json({ error: 'Not found' });
 
-  const today = new Date();
-  const formattedToday = today.toISOString().split('T')[0];
-  let expiryMonths = 1;
-  if (planId.includes('quarterly')) expiryMonths = 3;
-  else if (planId.includes('half_yearly')) expiryMonths = 6;
-  else if (planId.includes('annual')) expiryMonths = 12;
-
-  const newExpiry = new Date();
-  newExpiry.setMonth(today.getMonth() + expiryMonths);
-  const formattedExpiry = newExpiry.toISOString().split('T')[0];
+  const plan = await prisma.plan.findUnique({ where: { id: planId || member.planId } });
+  const formattedToday = istToday();
+  const base = daysUntil(member.expiryDate) >= 0 ? member.expiryDate : formattedToday;
+  const formattedExpiry = plan ? addPlanDuration(base, plan.duration) : addPlanDuration(base, '1 Month');
 
   const updated = await prisma.member.update({
     where: { id: memberId },
