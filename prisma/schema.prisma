@@ -74,6 +74,10 @@ model Member {
   status              MemberStatus   @default(Pending)
   emergencyContact    Json           @default("{}")
   medicalHistory      Json           @default("[]")
+  gender              String?
+  occupation          String?
+  alcoholic           Boolean        @default(false)
+  notes               String?
   idProofUrl          String?
   qrCodeValue         String         @default("")
   weightHistory       Json           @default("[]")
@@ -113,6 +117,7 @@ model Membership {
   status     String
   amount     Float    @default(0)
   paidAmount Float    @default(0)
+  discount   Float    @default(0)
   createdAt  DateTime @default(now())
 }
 

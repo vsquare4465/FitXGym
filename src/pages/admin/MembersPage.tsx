@@ -12,6 +12,24 @@ import { fillTemplate, openWhatsApp, WHATSAPP_TEMPLATES } from '../../lib/whatsa
 import { isValidEmail, parseOptionalAmount, phoneValidationMessage } from '../../lib/validation';
 
 type Filter = 'all' | 'active' | 'expiring' | 'expired' | 'pending' | 'free';
+type PayMode = 'later' | 'now';
+
+const EMPTY_ADD = {
+  name: '',
+  email: '',
+  phone: '',
+  planId: '',
+  paidAmount: '',
+  discount: '',
+  paymentMethod: 'Cash',
+  payMode: 'later' as PayMode,
+  membershipType: 'Paid' as MembershipType,
+  gender: '',
+  occupation: '',
+  alcoholic: false,
+  weight: '',
+  notes: '',
+};
 
 export default function MembersPage() {
   const { can } = useAuth();
@@ -22,20 +40,15 @@ export default function MembersPage() {
   const [showAdd, setShowAdd] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
-  const [form, setForm] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    planId: '',
-    paidAmount: '',
-    paymentMethod: 'Cash',
-    payMode: 'later' as 'later' | 'now',
-    membershipType: 'Paid' as MembershipType,
-  });
+  const [form, setForm] = useState(EMPTY_ADD);
 
   const planList = plans as Plan[];
   const planMap = useMemo(() => Object.fromEntries(planList.map(p => [p.id, p])), [planList]);
   const selectedPlanId = planList.some(p => p.id === form.planId) ? form.planId : (planList[0]?.id || '');
+  const selectedPlan = planList.find(p => p.id === selectedPlanId);
+  const planPrice = selectedPlan?.price || 0;
+  const discountValue = parseOptionalAmount(form.discount).value || 0;
+  const chargedDue = Math.max(0, planPrice - Math.min(discountValue, planPrice));
 
   useEffect(() => {
     if (selectedPlanId && selectedPlanId !== form.planId) {
@@ -86,7 +99,12 @@ export default function MembersPage() {
       setFormError(phoneError);
       return;
     }
-    let paidAmount: number | undefined;
+    const discountParsed = parseOptionalAmount(form.discount);
+    if (discountParsed.error) {
+      setFormError(discountParsed.error);
+      return;
+    }
+    let paidAmount = 0;
     if (form.membershipType === 'Paid' && form.payMode === 'now') {
       const amount = parseOptionalAmount(form.paidAmount);
       if (amount.error || amount.value === undefined) {
@@ -94,8 +112,6 @@ export default function MembersPage() {
         return;
       }
       paidAmount = amount.value;
-    } else {
-      paidAmount = 0;
     }
     setSaving(true);
     try {
@@ -106,10 +122,16 @@ export default function MembersPage() {
         planId: selectedPlanId,
         membershipType: form.membershipType,
         paidAmount,
+        discount: discountParsed.value || 0,
         paymentMethod: form.payMode === 'now' ? form.paymentMethod : 'Cash',
+        gender: form.gender || undefined,
+        occupation: form.occupation || undefined,
+        alcoholic: form.alcoholic,
+        weight: form.weight.trim() || undefined,
+        notes: form.notes.trim() || undefined,
       });
       setShowAdd(false);
-      setForm({ name: '', email: '', phone: '', planId: planList[0]?.id || '', paidAmount: '', paymentMethod: 'Cash', payMode: 'later', membershipType: 'Paid' });
+      setForm({ ...EMPTY_ADD, planId: planList[0]?.id || '' });
       refresh();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Could not create member');
@@ -244,12 +266,33 @@ export default function MembersPage() {
       {showAdd && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/70" onClick={() => setShowAdd(false)} />
-          <form noValidate onSubmit={handleAdd} className="relative bg-zinc-900 border border-zinc-800 rounded-xl p-5 w-full max-w-md space-y-3">
+          <form noValidate onSubmit={handleAdd} className="relative bg-zinc-900 border border-zinc-800 rounded-xl p-5 w-full max-w-md space-y-3 max-h-[90vh] overflow-y-auto">
             <h3 className="font-semibold">Add new member</h3>
             <p className="text-xs text-zinc-500">Member ID is assigned in sequence (MEM-0001, MEM-0002, …).</p>
             <input required placeholder="Full name" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
             <input required type="email" placeholder="Email" value={form.email} onChange={e => { setForm({ ...form, email: e.target.value }); setFormError(''); }} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
             <input required inputMode="numeric" placeholder="10-digit mobile (starts with 6–9)" value={form.phone} onChange={e => { setForm({ ...form, phone: e.target.value }); setFormError(''); }} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
+            <div className="grid grid-cols-2 gap-2">
+              {(['Male', 'Female'] as const).map(g => (
+                <label key={g} className={`flex items-center justify-center gap-2 py-2 rounded-lg border text-sm cursor-pointer ${form.gender === g ? 'border-orange-500 bg-orange-600/15 text-orange-300' : 'border-zinc-700 text-zinc-400'}`}>
+                  <input type="radio" name="gender" className="sr-only" checked={form.gender === g} onChange={() => setForm({ ...form, gender: g })} />
+                  {g}
+                </label>
+              ))}
+            </div>
+            <select value={form.occupation} onChange={e => setForm({ ...form, occupation: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm">
+              <option value="">Occupation (optional)</option>
+              <option value="Housewife">Housewife</option>
+              <option value="Business">Business</option>
+              <option value="Job">Job</option>
+              <option value="Other">Other</option>
+            </select>
+            <label className="flex items-center gap-2 text-sm text-zinc-300">
+              <input type="checkbox" checked={form.alcoholic} onChange={e => setForm({ ...form, alcoholic: e.target.checked })} className="rounded border-zinc-600" />
+              Consumes alcohol
+            </label>
+            <input type="text" inputMode="decimal" placeholder="Weight in kg (optional)" value={form.weight} onChange={e => setForm({ ...form, weight: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
+            <textarea placeholder="Optional notes — vitals, measurements, or anything else" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm resize-none" />
             <select value={form.membershipType} onChange={e => setForm({ ...form, membershipType: e.target.value as MembershipType, paidAmount: e.target.value !== 'Paid' ? '' : form.paidAmount })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm">
               <option value="Paid">Paid member</option>
               <option value="Complimentary">Complimentary (free / known person)</option>
@@ -261,23 +304,37 @@ export default function MembersPage() {
             </select>
             {form.membershipType === 'Paid' && (
               <>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="Discount (optional) e.g. 200"
+                  value={form.discount}
+                  onChange={e => { setForm({ ...form, discount: e.target.value }); setFormError(''); }}
+                  className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm"
+                />
+                <p className="text-xs text-zinc-500">
+                  Plan ₹{planPrice}
+                  {discountValue > 0 ? ` · Discount ₹${Math.min(discountValue, planPrice)}` : ''}
+                  {' '}· Due ₹{chargedDue}
+                  {discountValue > 0 ? ' — paying this due amount is fully paid' : ''}
+                </p>
                 <select
                   value={form.payMode}
-                  onChange={e => setForm({ ...form, payMode: e.target.value as 'later' | 'now', paidAmount: e.target.value === 'later' ? '' : form.paidAmount })}
+                  onChange={e => setForm({ ...form, payMode: e.target.value as PayMode, paidAmount: e.target.value === 'later' ? '' : form.paidAmount })}
                   className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm"
                 >
                   <option value="later">Pay later (no payment now)</option>
                   <option value="now">Paid now</option>
                 </select>
                 {form.payMode === 'later' && (
-                  <p className="text-xs text-zinc-500">Member is created with the plan fee due. Record payment anytime from their profile.</p>
+                  <p className="text-xs text-zinc-500">Member is created with ₹{chargedDue} due. Record payment anytime from their profile.</p>
                 )}
                 {form.payMode === 'now' && (
                   <>
                     <input
                       type="text"
                       inputMode="decimal"
-                      placeholder="Amount paid now"
+                      placeholder={`Amount paid now (₹${chargedDue} = full)`}
                       value={form.paidAmount}
                       onChange={e => { setForm({ ...form, paidAmount: e.target.value }); setFormError(''); }}
                       className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm"

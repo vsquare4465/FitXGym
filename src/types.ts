@@ -85,6 +85,10 @@ export interface Member {
   expiryDate: string;
   planId: string;
   membershipType?: MembershipType;
+  gender?: string;
+  occupation?: string;
+  alcoholic?: boolean;
+  notes?: string;
   status: MemberDbStatus;
   emergencyContact: {
     name: string;
@@ -129,6 +133,7 @@ export interface Membership {
   status: string;
   amount: number;
   paidAmount: number;
+  discount?: number;
   pending?: number;
 }
 

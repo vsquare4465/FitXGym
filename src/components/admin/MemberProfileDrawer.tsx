@@ -38,6 +38,7 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
   const [payAmount, setPayAmount] = useState('');
   const [payMethod, setPayMethod] = useState('Cash');
   const [renewPayMode, setRenewPayMode] = useState<'later' | 'now'>('later');
+  const [renewDiscount, setRenewDiscount] = useState('');
   const [actionError, setActionError] = useState('');
   const [actionSaving, setActionSaving] = useState(false);
   const [reminderMsg, setReminderMsg] = useState('');
@@ -50,6 +51,10 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
     address: '',
     membershipType: 'Paid' as MembershipType,
     status: 'Active' as Member['status'],
+    gender: '',
+    occupation: '',
+    alcoholic: false,
+    notes: '',
     emergencyName: '',
     emergencyPhone: '',
     emergencyRelationship: '',
@@ -76,6 +81,9 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
   const outstanding = profile
     ? Math.max(profile.pendingAmount, profile.currentMembership?.pending ?? 0)
     : 0;
+  const renewPlan = plans.find(p => p.id === renewPlanId);
+  const renewDisc = parseOptionalAmount(renewDiscount).value || 0;
+  const renewCharged = Math.max(0, (renewPlan?.price || 0) - Math.min(renewDisc, renewPlan?.price || 0));
 
   const openEdit = () => {
     if (!m) return;
@@ -88,6 +96,10 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
       address: m.address || '',
       membershipType: m.membershipType || 'Paid',
       status: m.status,
+      gender: m.gender || '',
+      occupation: m.occupation || '',
+      alcoholic: !!m.alcoholic,
+      notes: m.notes || '',
       emergencyName: m.emergencyContact?.name || '',
       emergencyPhone: m.emergencyContact?.phone || '',
       emergencyRelationship: m.emergencyContact?.relationship || '',
@@ -118,6 +130,10 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
         address: editForm.address || undefined,
         membershipType: editForm.membershipType,
         status: editForm.status,
+        gender: editForm.gender || undefined,
+        occupation: editForm.occupation || undefined,
+        alcoholic: editForm.alcoholic,
+        notes: editForm.notes.trim() || undefined,
         emergencyContact: {
           name: editForm.emergencyName,
           phone: editForm.emergencyPhone,
@@ -164,15 +180,22 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
       }
       amount = parsed.value;
     }
+    const discountParsed = parseOptionalAmount(renewDiscount);
+    if (discountParsed.error) {
+      setActionError(discountParsed.error);
+      return;
+    }
     setActionSaving(true);
     try {
       await adminApi.renewMember(memberId, {
         planId: renewPlanId,
         paidAmount: amount,
+        discount: discountParsed.value || 0,
         paymentMethod: payMethod,
       });
       setShowRenew(false);
       setPaidAmount('');
+      setRenewDiscount('');
       setRenewPayMode('later');
       onRefresh();
       await reload(memberId);
@@ -287,7 +310,7 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
                 </button>
               )}
               {canEdit && (
-                <button type="button" onClick={() => { setRenewPlanId(m.planId); setActionError(''); setRenewPayMode('later'); setPaidAmount(''); setShowRenew(true); }} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-orange-600 text-black text-xs font-semibold">
+                <button type="button" onClick={() => { setRenewPlanId(m.planId); setActionError(''); setRenewPayMode('later'); setPaidAmount(''); setRenewDiscount(''); setShowRenew(true); }} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-orange-600 text-black text-xs font-semibold">
                   <RefreshCw size={14} /> Renew
                 </button>
               )}
@@ -326,6 +349,15 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
                 <div className="col-span-2"><dt className="text-zinc-500 text-xs">Address</dt><dd>{m.address || '-'}</dd></div>
                 <div><dt className="text-zinc-500 text-xs">Emergency</dt><dd>{m.emergencyContact?.name || '-'} {m.emergencyContact?.phone}</dd></div>
                 <div><dt className="text-zinc-500 text-xs">Type</dt><dd>{MEMBERSHIP_TYPE_LABELS[m.membershipType || 'Paid']}</dd></div>
+                <div><dt className="text-zinc-500 text-xs">Gender</dt><dd>{m.gender || '-'}</dd></div>
+                <div><dt className="text-zinc-500 text-xs">Occupation</dt><dd>{m.occupation || '-'}</dd></div>
+                <div><dt className="text-zinc-500 text-xs">Alcohol</dt><dd>{m.alcoholic ? 'Yes' : 'No'}</dd></div>
+                {m.weightHistory?.[0] && (
+                  <div><dt className="text-zinc-500 text-xs">Weight</dt><dd>{m.weightHistory[m.weightHistory.length - 1].weight} kg</dd></div>
+                )}
+                {m.notes && (
+                  <div className="col-span-2"><dt className="text-zinc-500 text-xs">Notes / vitals</dt><dd className="whitespace-pre-wrap">{m.notes}</dd></div>
+                )}
               </dl>
             </section>
 
@@ -336,6 +368,9 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
                 <p className="text-zinc-500 text-xs">{formatDate(m.joinDate)} → {formatDate(m.expiryDate)}</p>
                 <div className="flex gap-4 text-xs pt-1">
                   <span>Amount: {paymentExempt ? 'Free' : formatCurrency(profile.currentMembership?.amount || profile.currentPlan?.price || 0)}</span>
+                  {!paymentExempt && (profile.currentMembership?.discount || 0) > 0 && (
+                    <span className="text-violet-300">Discount: {formatCurrency(profile.currentMembership?.discount || 0)}</span>
+                  )}
                   {!paymentExempt && (
                     <>
                       <span>Paid: {formatCurrency(profile.currentMembership?.paidAmount || 0)}</span>
@@ -422,6 +457,26 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
               <select value={editForm.status} onChange={e => setEditForm({ ...editForm, status: e.target.value as Member['status'] })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm">
                 {(['Active', 'Expired', 'Frozen', 'Pending'] as const).map(s => <option key={s} value={s}>{s}</option>)}
               </select>
+              <div className="grid grid-cols-2 gap-2">
+                {(['Male', 'Female'] as const).map(g => (
+                  <label key={g} className={`flex items-center justify-center gap-2 py-2 rounded-lg border text-sm cursor-pointer ${editForm.gender === g ? 'border-orange-500 bg-orange-600/15 text-orange-300' : 'border-zinc-700 text-zinc-400'}`}>
+                    <input type="radio" name="edit-gender" className="sr-only" checked={editForm.gender === g} onChange={() => setEditForm({ ...editForm, gender: g })} />
+                    {g}
+                  </label>
+                ))}
+              </div>
+              <select value={editForm.occupation} onChange={e => setEditForm({ ...editForm, occupation: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm">
+                <option value="">Occupation (optional)</option>
+                <option value="Housewife">Housewife</option>
+                <option value="Business">Business</option>
+                <option value="Job">Job</option>
+                <option value="Other">Other</option>
+              </select>
+              <label className="flex items-center gap-2 text-sm text-zinc-300">
+                <input type="checkbox" checked={editForm.alcoholic} onChange={e => setEditForm({ ...editForm, alcoholic: e.target.checked })} className="rounded border-zinc-600" />
+                Consumes alcohol
+              </label>
+              <textarea placeholder="Optional notes — vitals, measurements, weight, or anything else" value={editForm.notes} onChange={e => setEditForm({ ...editForm, notes: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm resize-none" />
               <p className="text-xs text-zinc-500 pt-1">Emergency contact</p>
               <input placeholder="Name" value={editForm.emergencyName} onChange={e => setEditForm({ ...editForm, emergencyName: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
               <input placeholder="Phone" value={editForm.emergencyPhone} onChange={e => setEditForm({ ...editForm, emergencyPhone: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
@@ -471,13 +526,15 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
               </select>
               {!paymentExempt && (
                 <>
+                  <input type="text" inputMode="decimal" placeholder="Discount (optional)" value={renewDiscount} onChange={e => { setRenewDiscount(e.target.value); setActionError(''); }} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
+                  <p className="text-xs text-zinc-500">Plan ₹{renewPlan?.price || 0} · Due ₹{renewCharged}{renewDisc > 0 ? ' (fully paid if they pay this)' : ''}</p>
                   <select value={renewPayMode} onChange={e => setRenewPayMode(e.target.value as 'later' | 'now')} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm">
                     <option value="later">Pay later (no payment now)</option>
                     <option value="now">Paid now</option>
                   </select>
                   {renewPayMode === 'now' && (
                     <>
-                      <input type="text" inputMode="decimal" placeholder="Amount paid now" value={paidAmount} onChange={e => { setPaidAmount(e.target.value); setActionError(''); }} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
+                      <input type="text" inputMode="decimal" placeholder={`Amount paid now (₹${renewCharged} = full)`} value={paidAmount} onChange={e => { setPaidAmount(e.target.value); setActionError(''); }} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
                       <select value={payMethod} onChange={e => setPayMethod(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm">
                         {['Cash', 'UPI', 'Bank Transfer', 'Card', 'Other'].map(method => <option key={method}>{method}</option>)}
                       </select>

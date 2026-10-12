@@ -65,6 +65,27 @@ function prismaErrorCode(err: unknown): string {
   return '';
 }
 
+function applyDiscount(planPrice: number, discountRaw: unknown): { discount: number; charged: number; error?: string } {
+  const parsed = parseRupees(discountRaw);
+  if (!parsed.ok) return { discount: 0, charged: planPrice, error: 'Enter a valid discount amount' };
+  const discount = Math.min(parsed.value, Math.max(0, planPrice));
+  return { discount, charged: Math.max(0, planPrice - discount) };
+}
+
+const GENDERS = ['Male', 'Female'];
+const OCCUPATIONS = ['Housewife', 'Business', 'Job', 'Other'];
+
+function optionalProfileFields(body: { gender?: unknown; occupation?: unknown; alcoholic?: unknown; notes?: unknown }) {
+  const gender = String(body.gender || '').trim();
+  const occupation = String(body.occupation || '').trim();
+  return {
+    gender: GENDERS.includes(gender) ? gender : null,
+    occupation: OCCUPATIONS.includes(occupation) ? occupation : occupation ? 'Other' : null,
+    alcoholic: Boolean(body.alcoholic),
+    notes: String(body.notes || '').trim() || null,
+  };
+}
+
 router.post('/members', requirePermission('members', 'write'), async (req, res) => {
   const body = req.body;
   const name = String(body.name || '').trim();
@@ -112,7 +133,16 @@ router.post('/members', requirePermission('members', 'write'), async (req, res) 
   const expiryDate = body.expiryDate || addMonths(joinDate, months);
   const paymentExempt = isPaymentExempt(membershipType);
   const planPrice = paymentExempt ? 0 : (plan.price || 0);
+  const priced = applyDiscount(planPrice, body.discount);
+  if (priced.error) return res.status(400).json({ error: priced.error });
+  const charged = paymentExempt ? 0 : priced.charged;
+  const discount = paymentExempt ? 0 : priced.discount;
   if (paymentExempt) paidAmount = 0;
+  const profile = optionalProfileFields(body);
+  const startingWeight = parseRupees(body.weight);
+  const startingHistory = startingWeight.ok && startingWeight.value > 0
+    ? [{ date: joinDate, weight: startingWeight.value }]
+    : [];
 
   try {
     const created = await prisma.$transaction(async (tx) => {
@@ -133,10 +163,14 @@ router.post('/members', requirePermission('members', 'write'), async (req, res) 
           planId: plan.id,
           membershipType,
           status: body.status || 'Active',
+          gender: profile.gender,
+          occupation: profile.occupation,
+          alcoholic: profile.alcoholic,
+          notes: profile.notes,
           emergencyContact: body.emergencyContact || {},
           medicalHistory: body.medicalHistory || [],
           qrCodeValue: body.qrCodeValue || id,
-          weightHistory: [],
+          weightHistory: startingHistory,
           measurementsHistory: [],
           workoutPlan: [],
           dietPlan: [],
@@ -168,26 +202,33 @@ router.post('/members', requirePermission('members', 'write'), async (req, res) 
           startDate: joinDate,
           endDate: expiryDate,
           status: 'Active',
-          amount: planPrice,
+          amount: charged,
           paidAmount,
+          discount,
         },
       });
 
-      if (!paymentExempt && planPrice > 0) {
+      if (!paymentExempt && charged > 0) {
+        const fullyPaid = paidAmount >= charged;
         await tx.payment.create({
           data: {
             memberId: id,
             memberName: name,
             amount: paidAmount,
-            expectedAmount: planPrice > paidAmount ? planPrice : undefined,
+            expectedAmount: charged > paidAmount ? charged : undefined,
             date: joinDate,
             category: 'New Membership',
             paymentMethod: body.paymentMethod || 'Cash',
-            status: paidAmount <= 0 ? 'Pending' : paidAmount >= planPrice ? 'Completed' : 'Pending',
+            status: paidAmount <= 0 ? 'Pending' : fullyPaid ? 'Completed' : 'Pending',
             invoiceNo: `FTX-INV-${Math.floor(6000 + Math.random() * 3000)}`,
             membershipId: membership.id,
             recordedBy: body.recordedBy,
-            notes: body.notes || (paidAmount <= 0 ? 'Not paid yet' : undefined),
+            notes:
+              paidAmount <= 0
+                ? 'Not paid yet'
+                : discount > 0
+                  ? `Discount ₹${discount} on plan ₹${planPrice}`
+                  : undefined,
           },
         });
       }
@@ -231,6 +272,10 @@ router.put('/members/:id', requirePermission('members', 'write'), async (req, re
       planId: body.planId,
       membershipType: body.membershipType,
       status: body.status,
+      gender: body.gender !== undefined ? optionalProfileFields(body).gender : undefined,
+      occupation: body.occupation !== undefined ? optionalProfileFields(body).occupation : undefined,
+      alcoholic: body.alcoholic !== undefined ? Boolean(body.alcoholic) : undefined,
+      notes: body.notes !== undefined ? String(body.notes || '').trim() || null : undefined,
       emergencyContact: body.emergencyContact,
       medicalHistory: body.medicalHistory,
       idProofUrl: body.idProofUrl,
@@ -295,7 +340,11 @@ router.post('/members/:id/renew', requirePermission('members', 'write'), async (
   const base = daysUntil(member.expiryDate) >= 0 ? member.expiryDate : startDate;
   const endDate = addMonths(base, months);
   const paymentExempt = isPaymentExempt(member.membershipType);
-  const amount = paymentExempt ? 0 : plan.price;
+  const planPrice = paymentExempt ? 0 : plan.price;
+  const priced = applyDiscount(planPrice, req.body.discount);
+  if (priced.error) return res.status(400).json({ error: priced.error });
+  const amount = paymentExempt ? 0 : priced.charged;
+  const discount = paymentExempt ? 0 : priced.discount;
   const paid = paymentExempt ? 0 : paidParsed.value;
 
   try {
@@ -309,6 +358,7 @@ router.post('/members/:id/renew', requirePermission('members', 'write'), async (
           status: 'Active',
           amount,
           paidAmount: paid,
+          discount,
         },
       });
 
@@ -330,7 +380,7 @@ router.post('/members/:id/renew', requirePermission('members', 'write'), async (
             status: paid <= 0 ? 'Pending' : paid >= amount ? 'Completed' : 'Pending',
             invoiceNo: `FTX-INV-${Math.floor(6000 + Math.random() * 3000)}`,
             membershipId: membership.id,
-            notes: notes || (paid <= 0 ? 'Not paid yet' : undefined),
+            notes: notes || (paid <= 0 ? 'Not paid yet' : discount > 0 ? `Discount ₹${discount} on plan ₹${planPrice}` : undefined),
             recordedBy,
           },
         });
