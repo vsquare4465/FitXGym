@@ -5,7 +5,7 @@ export function toClientMember(m: PrismaMember): Member {
   return {
     id: m.id,
     name: m.name,
-    email: m.email,
+    email: m.email ?? '',
     phone: m.phone,
     whatsapp: m.whatsapp ?? undefined,
     dateOfBirth: m.dateOfBirth ?? undefined,
@@ -19,6 +19,7 @@ export function toClientMember(m: PrismaMember): Member {
     occupation: m.occupation ?? undefined,
     alcoholic: m.alcoholic,
     notes: m.notes ?? undefined,
+    aadhaar: m.aadhaar ?? undefined,
     status: m.status as Member['status'],
     emergencyContact: m.emergencyContact as Member['emergencyContact'],
     medicalHistory: m.medicalHistory as string[],

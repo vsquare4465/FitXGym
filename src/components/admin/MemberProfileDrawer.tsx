@@ -7,8 +7,9 @@ import { formatCurrency, formatDate } from '../../lib/format';
 import { addPlanDuration, daysUntil, todayISO } from '../../lib/memberUtils';
 import { formatAttendanceTime, istNowTime } from '../../lib/ist';
 import StatusBadge from './StatusBadge';
+import MemberPhotoPicker, { MemberAvatar } from './MemberPhotoPicker';
 import { fillTemplate, openWhatsApp, WHATSAPP_TEMPLATES } from '../../lib/whatsapp';
-import { isValidEmail, parseOptionalAmount, phoneValidationMessage } from '../../lib/validation';
+import { aadhaarValidationMessage, digitsOnly, maskAadhaar, parseOptionalAmount, phoneValidationMessage, shortAddress } from '../../lib/validation';
 import { useAuth } from '../../context/AuthContext';
 
 interface Props {
@@ -47,15 +48,15 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
   const [reminderMsg, setReminderMsg] = useState('');
   const [editForm, setEditForm] = useState({
     name: '',
-    email: '',
     phone: '',
     whatsapp: '',
     dateOfBirth: '',
     address: '',
+    aadhaar: '',
+    photo: '',
     membershipType: 'Paid' as MembershipType,
     status: 'Active' as Member['status'],
     gender: '',
-    occupation: '',
     alcoholic: false,
     notes: '',
     joinDate: '',
@@ -107,15 +108,15 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
     if (!m) return;
     setEditForm({
       name: m.name,
-      email: m.email,
       phone: m.phone,
       whatsapp: m.whatsapp || '',
       dateOfBirth: m.dateOfBirth || '',
       address: m.address || '',
+      aadhaar: digitsOnly(m.aadhaar || ''),
+      photo: m.photo || '',
       membershipType: m.membershipType || 'Paid',
       status: m.status,
       gender: m.gender || '',
-      occupation: m.occupation || '',
       alcoholic: !!m.alcoholic,
       notes: m.notes || '',
       joinDate: m.joinDate || '',
@@ -132,28 +133,32 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
 
   const handleEditSave = async () => {
     if (!m || !memberId) return;
-    if (!isValidEmail(editForm.email)) {
-      setEditError('Enter a valid email address.');
-      return;
+    if (editForm.phone.trim()) {
+      const phoneError = phoneValidationMessage(editForm.phone);
+      if (phoneError) {
+        setEditError(phoneError);
+        return;
+      }
     }
-    const phoneError = phoneValidationMessage(editForm.phone);
-    if (phoneError) {
-      setEditError(phoneError);
+    const aadhaarError = aadhaarValidationMessage(editForm.aadhaar);
+    if (aadhaarError) {
+      setEditError(aadhaarError);
       return;
     }
     try {
+      const { email: _email, ...memberRest } = m;
       await adminApi.updateMember(memberId, {
-        ...m,
+        ...memberRest,
         name: editForm.name,
-        email: editForm.email,
         phone: editForm.phone,
         whatsapp: editForm.whatsapp || editForm.phone,
         dateOfBirth: editForm.dateOfBirth || undefined,
-        address: editForm.address || undefined,
+        address: shortAddress(editForm.address) || undefined,
+        aadhaar: digitsOnly(editForm.aadhaar) || null,
+        photo: editForm.photo || '',
         membershipType: editForm.membershipType,
         status: editForm.status,
         gender: editForm.gender || undefined,
-        occupation: editForm.occupation || undefined,
         alcoholic: editForm.alcoholic,
         notes: editForm.notes.trim() || undefined,
         joinDate: editForm.joinDate,
@@ -317,9 +322,12 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
       <div className="relative w-full max-w-lg bg-zinc-950 border-l border-zinc-800 h-full overflow-y-auto">
         <div className="sticky top-0 z-10 flex items-center justify-between p-4 border-b border-zinc-800 bg-zinc-950/95 backdrop-blur">
-          <div>
-            <h2 className="font-bold text-white">{m?.name || 'Member profile'}</h2>
-            <p className="text-xs text-zinc-500">{memberId}</p>
+          <div className="flex items-center gap-3 min-w-0">
+            {m && <MemberAvatar photo={m.photo} name={m.name} />}
+            <div className="min-w-0">
+              <h2 className="font-bold text-white truncate">{m?.name || 'Member profile'}</h2>
+              <p className="text-xs text-zinc-500">{memberId}{m?.address ? ` · ${m.address}` : ''}</p>
+            </div>
           </div>
           <button type="button" onClick={onClose} className="p-2 text-zinc-400 hover:text-white">
             <X size={20} />
@@ -356,14 +364,16 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
                   <CreditCard size={14} /> Record payment
                 </button>
               )}
-              {!paymentExempt && (
+              {!paymentExempt && (m.whatsapp || m.phone) && (
                 <button type="button" onClick={openPaymentReminder} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-600/20 text-amber-300 text-xs font-medium border border-amber-500/30">
                   <Bell size={14} /> Payment reminder · WhatsApp
                 </button>
               )}
+              {(m.whatsapp || m.phone) && (
               <button type="button" onClick={() => whatsapp('general')} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-600/20 text-emerald-400 text-xs font-medium">
                 <MessageCircle size={14} /> WhatsApp
               </button>
+              )}
               {canEdit && (
                 <button type="button" onClick={handleCheckIn} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-zinc-800 text-white text-xs font-medium">
                   <UserCheck size={14} /> Check in
@@ -379,15 +389,14 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
             <section>
               <h3 className="text-xs font-semibold text-zinc-500 uppercase mb-2">Personal info</h3>
               <dl className="grid grid-cols-2 gap-2 text-sm">
-                <div><dt className="text-zinc-500 text-xs">Phone</dt><dd>{m.phone}</dd></div>
-                <div><dt className="text-zinc-500 text-xs">WhatsApp</dt><dd>{m.whatsapp || m.phone}</dd></div>
-                <div><dt className="text-zinc-500 text-xs">Email</dt><dd className="truncate">{m.email}</dd></div>
+                <div><dt className="text-zinc-500 text-xs">Phone</dt><dd>{m.phone || '—'}</dd></div>
+                <div><dt className="text-zinc-500 text-xs">WhatsApp</dt><dd>{m.whatsapp || m.phone || '—'}</dd></div>
+                <div><dt className="text-zinc-500 text-xs">Aadhaar</dt><dd>{maskAadhaar(m.aadhaar)}</dd></div>
                 <div><dt className="text-zinc-500 text-xs">DOB</dt><dd>{m.dateOfBirth ? formatDate(m.dateOfBirth) : '-'}</dd></div>
-                <div className="col-span-2"><dt className="text-zinc-500 text-xs">Address</dt><dd>{m.address || '-'}</dd></div>
+                <div className="col-span-2"><dt className="text-zinc-500 text-xs">Locality</dt><dd>{m.address || '-'}</dd></div>
                 <div><dt className="text-zinc-500 text-xs">Emergency</dt><dd>{m.emergencyContact?.name || '-'} {m.emergencyContact?.phone}</dd></div>
                 <div><dt className="text-zinc-500 text-xs">Type</dt><dd>{MEMBERSHIP_TYPE_LABELS[m.membershipType || 'Paid']}</dd></div>
                 <div><dt className="text-zinc-500 text-xs">Gender</dt><dd>{m.gender || '-'}</dd></div>
-                <div><dt className="text-zinc-500 text-xs">Occupation</dt><dd>{m.occupation || '-'}</dd></div>
                 <div><dt className="text-zinc-500 text-xs">Alcohol</dt><dd>{m.alcoholic ? 'Yes' : 'No'}</dd></div>
                 {m.weightHistory?.[0] && (
                   <div><dt className="text-zinc-500 text-xs">Weight</dt><dd>{m.weightHistory[m.weightHistory.length - 1].weight} kg</dd></div>
@@ -493,9 +502,10 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
             <div className="absolute inset-0 bg-black/70" onClick={() => setShowEdit(false)} />
             <div className="relative bg-zinc-900 border border-zinc-800 rounded-xl p-5 w-full max-w-md max-h-[90vh] overflow-y-auto space-y-3">
               <h3 className="font-semibold">Edit member details</h3>
+              <MemberPhotoPicker value={editForm.photo} onChange={photo => { setEditForm({ ...editForm, photo }); setEditError(''); }} onError={setEditError} />
               <input required placeholder="Full name" value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
-              <input required type="email" placeholder="Email" value={editForm.email} onChange={e => { setEditForm({ ...editForm, email: e.target.value }); setEditError(''); }} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
-              <input required inputMode="numeric" placeholder="10-digit mobile" value={editForm.phone} onChange={e => { setEditForm({ ...editForm, phone: e.target.value }); setEditError(''); }} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
+              <input inputMode="numeric" placeholder="10-digit mobile (optional)" value={editForm.phone} onChange={e => { setEditForm({ ...editForm, phone: e.target.value }); setEditError(''); }} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
+              <input inputMode="numeric" maxLength={12} placeholder="Aadhaar (optional, 12 digits)" value={editForm.aadhaar} onChange={e => { setEditForm({ ...editForm, aadhaar: digitsOnly(e.target.value).slice(0, 12) }); setEditError(''); }} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
               <input placeholder="WhatsApp" value={editForm.whatsapp} onChange={e => setEditForm({ ...editForm, whatsapp: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
               <input type="date" placeholder="Date of birth" value={editForm.dateOfBirth} onChange={e => setEditForm({ ...editForm, dateOfBirth: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
               <label className="block text-xs text-zinc-500">Joining date
@@ -512,7 +522,7 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
               <label className="block text-xs text-zinc-500">Expiry date (from plan duration)
                 <input type="date" readOnly value={editForm.expiryDate} className="mt-1 w-full px-3 py-2 rounded-lg bg-zinc-950/70 border border-zinc-700 text-sm text-zinc-300" />
               </label>
-              <textarea placeholder="Address" value={editForm.address} onChange={e => setEditForm({ ...editForm, address: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm resize-none" />
+              <input maxLength={80} placeholder="Locality / area (e.g. Senthli, Khurja)" value={editForm.address} onChange={e => setEditForm({ ...editForm, address: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
               <select value={editForm.membershipType} onChange={e => setEditForm({ ...editForm, membershipType: e.target.value as MembershipType })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm">
                 <option value="Paid">Paid member</option>
                 <option value="Complimentary">Complimentary (free / known person)</option>
@@ -529,13 +539,6 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
                   </label>
                 ))}
               </div>
-              <select value={editForm.occupation} onChange={e => setEditForm({ ...editForm, occupation: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm">
-                <option value="">Occupation (optional)</option>
-                <option value="Housewife">Housewife</option>
-                <option value="Business">Business</option>
-                <option value="Job">Job</option>
-                <option value="Other">Other</option>
-              </select>
               <label className="flex items-center gap-2 text-sm text-zinc-300">
                 <input type="checkbox" checked={editForm.alcoholic} onChange={e => setEditForm({ ...editForm, alcoholic: e.target.checked })} className="rounded border-zinc-600" />
                 Consumes alcohol

@@ -60,8 +60,8 @@ model User {
 model Member {
   id                  String         @id
   name                String
-  email               String         @unique
-  phone               String
+  email               String?        @unique
+  phone               String         @default("")
   whatsapp            String?
   dateOfBirth         String?
   address             String?
@@ -78,6 +78,7 @@ model Member {
   occupation          String?
   alcoholic           Boolean        @default(false)
   notes               String?
+  aadhaar             String?        @unique
   idProofUrl          String?
   qrCodeValue         String         @default("")
   weightHistory       Json           @default("[]")

@@ -28,3 +28,30 @@ export function phoneValidationMessage(phone: string): string | null {
   if (!isValidIndianPhone(phone)) return 'Phone must be a valid 10-digit Indian mobile (start with 6–9).';
   return null;
 }
+
+export function digitsOnly(raw: string): string {
+  return raw.replace(/\D/g, '');
+}
+
+/** Optional 12-digit Aadhaar. Blank is allowed. */
+export function isValidAadhaar(raw: string): boolean {
+  return /^\d{12}$/.test(digitsOnly(raw));
+}
+
+export function aadhaarValidationMessage(raw: string): string | null {
+  const d = digitsOnly(raw);
+  if (!d) return null;
+  if (d.length !== 12) return 'Enter a 12-digit Aadhaar number, or leave it blank.';
+  return null;
+}
+
+export function maskAadhaar(raw?: string | null): string {
+  const d = digitsOnly(raw || '');
+  if (d.length !== 12) return '—';
+  return `XXXX XXXX ${d.slice(-4)}`;
+}
+
+/** Short locality, e.g. "Senthli, Khurja". */
+export function shortAddress(raw?: string | null): string {
+  return String(raw || '').trim().replace(/\s+/g, ' ').slice(0, 80);
+}

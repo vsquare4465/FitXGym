@@ -23,3 +23,18 @@ export function normalizeStaffPhone(phone?: string | null): string | null {
   if (!isValidIndianPhone(phone)) return null;
   return phone.replace(/\D/g, '').slice(-10);
 }
+
+export function normalizeAadhaar(raw: unknown): string | null {
+  const d = String(raw || '').replace(/\D/g, '');
+  return d || null;
+}
+
+export function isValidAadhaar(raw: string): boolean {
+  return /^\d{12}$/.test(raw.replace(/\D/g, ''));
+}
+
+export function shortAddress(raw: unknown): string | null {
+  const v = String(raw || '').trim().replace(/\s+/g, ' ');
+  if (!v) return null;
+  return v.slice(0, 80);
+}

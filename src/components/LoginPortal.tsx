@@ -45,8 +45,8 @@ export default function LoginPortal({ members, onLoginSuccess, onCancel }: Login
         // Member login
         const cleanedInput = emailOrPhone.trim().toLowerCase();
         const foundMember = members.find(m => 
-          m.email.toLowerCase() === cleanedInput || 
-          m.phone.replace(/\s+/g, '') === cleanedInput.replace(/\s+/g, '') ||
+          (m.email || '').toLowerCase() === cleanedInput || 
+          (m.phone || '').replace(/\s+/g, '') === cleanedInput.replace(/\s+/g, '') ||
           m.phone === cleanedInput
         );
 

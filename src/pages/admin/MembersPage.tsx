@@ -7,17 +7,20 @@ import { formatDate } from '../../lib/format';
 import { addPlanDuration, getMemberDisplayStatus, todayISO } from '../../lib/memberUtils';
 import StatusBadge from '../../components/admin/StatusBadge';
 import MemberProfileDrawer from '../../components/admin/MemberProfileDrawer';
+import MemberPhotoPicker, { MemberAvatar } from '../../components/admin/MemberPhotoPicker';
 import { adminApi } from '../../api/client';
 import { fillTemplate, openWhatsApp, WHATSAPP_TEMPLATES } from '../../lib/whatsapp';
-import { isValidEmail, parseOptionalAmount, phoneValidationMessage } from '../../lib/validation';
+import { aadhaarValidationMessage, digitsOnly, parseOptionalAmount, phoneValidationMessage, shortAddress } from '../../lib/validation';
 
 type Filter = 'all' | 'active' | 'expiring' | 'expired' | 'pending' | 'free';
 type PayMode = 'later' | 'now';
 
 const EMPTY_ADD = {
   name: '',
-  email: '',
   phone: '',
+  aadhaar: '',
+  address: '',
+  photo: '',
   planId: '',
   paidAmount: '',
   discount: '',
@@ -25,7 +28,6 @@ const EMPTY_ADD = {
   payMode: 'later' as PayMode,
   membershipType: 'Paid' as MembershipType,
   gender: '',
-  occupation: '',
   alcoholic: false,
   weight: '',
   notes: '',
@@ -78,7 +80,9 @@ export default function MembersPage() {
   const filtered = enriched.filter(({ member, status }) => {
     const q = search.toLowerCase();
     const matchSearch = !q || member.name.toLowerCase().includes(q) ||
-      member.phone.includes(q) || member.id.toLowerCase().includes(q) || member.email.toLowerCase().includes(q);
+      (member.phone || '').includes(q) || member.id.toLowerCase().includes(q) ||
+      (member.address || '').toLowerCase().includes(q) ||
+      digitsOnly(member.aadhaar || '').includes(digitsOnly(q));
     const matchFilter =
       filter === 'all' ||
       (filter === 'active' && status === 'Active') ||
@@ -105,13 +109,16 @@ export default function MembersPage() {
       setFormError('Enter the joining date.');
       return;
     }
-    if (!isValidEmail(form.email)) {
-      setFormError('Enter a valid email address.');
-      return;
+    if (form.phone.trim()) {
+      const phoneError = phoneValidationMessage(form.phone);
+      if (phoneError) {
+        setFormError(phoneError);
+        return;
+      }
     }
-    const phoneError = phoneValidationMessage(form.phone);
-    if (phoneError) {
-      setFormError(phoneError);
+    const aadhaarError = aadhaarValidationMessage(form.aadhaar);
+    if (aadhaarError) {
+      setFormError(aadhaarError);
       return;
     }
     const discountParsed = parseOptionalAmount(form.discount);
@@ -132,15 +139,16 @@ export default function MembersPage() {
     try {
       await adminApi.createMember({
         name: form.name.trim(),
-        email: form.email.trim(),
         phone: form.phone.trim(),
+        aadhaar: digitsOnly(form.aadhaar) || undefined,
+        address: shortAddress(form.address) || undefined,
+        photo: form.photo || undefined,
         planId: selectedPlanId,
         membershipType: form.membershipType,
         paidAmount,
         discount: discountParsed.value || 0,
         paymentMethod: form.payMode === 'now' ? form.paymentMethod : 'Cash',
         gender: form.gender || undefined,
-        occupation: form.occupation || undefined,
         alcoholic: form.alcoholic,
         weight: form.weight.trim() || undefined,
         notes: form.notes.trim() || undefined,
@@ -191,7 +199,7 @@ export default function MembersPage() {
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search name, phone, ID..."
+            placeholder="Search name, phone, ID, locality..."
             className="w-full pl-9 pr-4 py-2.5 rounded-lg bg-zinc-900 border border-zinc-800 text-sm"
           />
         </div>
@@ -214,9 +222,13 @@ export default function MembersPage() {
         {filtered.map(({ member, status, planName }) => (
           <div key={member.id} className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
             <div className="flex justify-between items-start gap-2 mb-2">
-              <div>
-                <p className="font-semibold">{member.name}</p>
-                <p className="text-xs text-zinc-500">{member.id} · {member.phone}</p>
+              <div className="flex items-start gap-3 min-w-0">
+                <MemberAvatar photo={member.photo} name={member.name} />
+                <div className="min-w-0">
+                  <p className="font-semibold truncate">{member.name}</p>
+                  <p className="text-xs text-zinc-500">{member.id}{member.phone ? ` · ${member.phone}` : ''}</p>
+                  {member.address && <p className="text-xs text-zinc-500 truncate">{member.address}</p>}
+                </div>
               </div>
               <StatusBadge status={status} />
             </div>
@@ -225,6 +237,7 @@ export default function MembersPage() {
               <button type="button" onClick={() => setSelectedId(member.id)} className="flex-1 py-2 rounded-lg bg-zinc-800 text-xs font-medium flex items-center justify-center gap-1">
                 <Eye size={14} /> View
               </button>
+              {(member.whatsapp || member.phone) && (
               <button
                 type="button"
                 onClick={() => {
@@ -235,6 +248,7 @@ export default function MembersPage() {
               >
                 <MessageCircle size={16} />
               </button>
+              )}
               {can('members', 'write') && (
                 <button type="button" onClick={() => handleDelete(member.id, member.name)} className="p-2 rounded-lg bg-red-500/10 text-red-400">
                   <Trash2 size={16} />
@@ -261,8 +275,13 @@ export default function MembersPage() {
             {filtered.map(({ member, status, planName }) => (
               <tr key={member.id} className="border-t border-zinc-800/80 hover:bg-zinc-900/30">
                 <td className="p-3">
-                  <p className="font-medium">{member.name}</p>
-                  <p className="text-xs text-zinc-500">{member.id} · {member.phone}</p>
+                  <div className="flex items-center gap-3">
+                    <MemberAvatar photo={member.photo} name={member.name} size="sm" />
+                    <div>
+                      <p className="font-medium">{member.name}</p>
+                      <p className="text-xs text-zinc-500">{member.id}{member.phone ? ` · ${member.phone}` : ''}{member.address ? ` · ${member.address}` : ''}</p>
+                    </div>
+                  </div>
                 </td>
                 <td className="p-3 text-zinc-400">{planName}</td>
                 <td className="p-3 text-zinc-400">{formatDate(member.expiryDate)}</td>
@@ -287,9 +306,11 @@ export default function MembersPage() {
           <form noValidate onSubmit={handleAdd} className="relative bg-zinc-900 border border-zinc-800 rounded-xl p-5 w-full max-w-md space-y-3 max-h-[90vh] overflow-y-auto">
             <h3 className="font-semibold">Add new member</h3>
             <p className="text-xs text-zinc-500">Member ID is assigned in sequence (MEM-0001, MEM-0002, …).</p>
+            <MemberPhotoPicker value={form.photo} onChange={photo => { setForm({ ...form, photo }); setFormError(''); }} onError={setFormError} />
             <input required placeholder="Full name" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
-            <input required type="email" placeholder="Email" value={form.email} onChange={e => { setForm({ ...form, email: e.target.value }); setFormError(''); }} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
-            <input required inputMode="numeric" placeholder="10-digit mobile (starts with 6–9)" value={form.phone} onChange={e => { setForm({ ...form, phone: e.target.value }); setFormError(''); }} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
+            <input inputMode="numeric" placeholder="10-digit mobile (optional)" value={form.phone} onChange={e => { setForm({ ...form, phone: e.target.value }); setFormError(''); }} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
+            <input inputMode="numeric" maxLength={12} placeholder="Aadhaar (optional, 12 digits)" value={form.aadhaar} onChange={e => { setForm({ ...form, aadhaar: digitsOnly(e.target.value).slice(0, 12) }); setFormError(''); }} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
+            <input maxLength={80} placeholder="Locality / area (e.g. Senthli, Khurja)" value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
             <div className="grid grid-cols-2 gap-2">
               {(['Male', 'Female'] as const).map(g => (
                 <label key={g} className={`flex items-center justify-center gap-2 py-2 rounded-lg border text-sm cursor-pointer ${form.gender === g ? 'border-orange-500 bg-orange-600/15 text-orange-300' : 'border-zinc-700 text-zinc-400'}`}>
@@ -298,13 +319,6 @@ export default function MembersPage() {
                 </label>
               ))}
             </div>
-            <select value={form.occupation} onChange={e => setForm({ ...form, occupation: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm">
-              <option value="">Occupation (optional)</option>
-              <option value="Housewife">Housewife</option>
-              <option value="Business">Business</option>
-              <option value="Job">Job</option>
-              <option value="Other">Other</option>
-            </select>
             <label className="flex items-center gap-2 text-sm text-zinc-300">
               <input type="checkbox" checked={form.alcoholic} onChange={e => setForm({ ...form, alcoholic: e.target.checked })} className="rounded border-zinc-600" />
               Consumes alcohol

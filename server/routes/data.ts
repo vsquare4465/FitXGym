@@ -6,7 +6,7 @@ import { isPaymentExempt } from '../lib/permissions.js';
 import { toClientMember } from '../lib/memberMapper.js';
 import { buildDashboard, getMemberProfile } from '../lib/dashboardStats.js';
 import { nextMemberId } from '../lib/memberId.js';
-import { isValidEmail, isValidIndianPhone, parseRupees } from '../lib/validation.js';
+import { isValidAadhaar, isValidEmail, isValidIndianPhone, normalizeAadhaar, parseRupees, shortAddress } from '../lib/validation.js';
 import { normalizeWhatsAppNumber } from '../lib/whatsapp.js';
 import { daysUntil } from '../lib/dateRange.js';
 import { istNowTime, istToday, minutesBetweenIst } from '../lib/ist.js';
@@ -89,11 +89,17 @@ router.post('/members', requirePermission('members', 'write'), async (req, res) 
   const body = req.body;
   const name = String(body.name || '').trim();
   if (!name) return res.status(400).json({ error: 'Name is required' });
-  if (!isValidEmail(String(body.email || ''))) {
-    return res.status(400).json({ error: 'Enter a valid email address' });
+  const emailRaw = String(body.email || '').trim().toLowerCase();
+  if (emailRaw && !isValidEmail(emailRaw)) {
+    return res.status(400).json({ error: 'Enter a valid email address, or leave email blank' });
   }
-  if (!isValidIndianPhone(String(body.phone || ''))) {
-    return res.status(400).json({ error: 'Enter a valid 10-digit Indian mobile number' });
+  const phoneRaw = String(body.phone || '').trim();
+  if (phoneRaw && !isValidIndianPhone(phoneRaw)) {
+    return res.status(400).json({ error: 'Enter a valid 10-digit Indian mobile, or leave phone blank' });
+  }
+  const aadhaarRaw = normalizeAadhaar(body.aadhaar);
+  if (aadhaarRaw && !isValidAadhaar(aadhaarRaw)) {
+    return res.status(400).json({ error: 'Enter a 12-digit Aadhaar number, or leave it blank' });
   }
   const membershipType = body.membershipType || 'Paid';
   if (!['Paid', 'Complimentary', 'Staff'].includes(membershipType)) {
@@ -108,25 +114,34 @@ router.post('/members', requirePermission('members', 'write'), async (req, res) 
   if (!plan) {
     return res.status(400).json({ error: 'Pick a membership plan' });
   }
-  const email = String(body.email).trim().toLowerCase();
-  const phone = String(body.phone).trim();
-  const existingEmail = await prisma.member.findUnique({ where: { email } });
-  if (existingEmail) {
-    return res.status(400).json({ error: 'A member with this email already exists' });
+  const email = emailRaw || null;
+  const phone = phoneRaw ? phoneRaw.replace(/\D/g, '').slice(-10) : '';
+  const aadhaar = aadhaarRaw;
+  if (aadhaar) {
+    const existingAadhaar = await prisma.member.findUnique({ where: { aadhaar } });
+    if (existingAadhaar) {
+      return res.status(400).json({ error: 'A member with this Aadhaar number already exists' });
+    }
   }
-  const existingUser = await prisma.user.findUnique({ where: { email } });
-  if (existingUser && existingUser.role !== 'MEMBER') {
-    return res.status(400).json({ error: 'This email is already used by a staff login' });
-  }
-  if (existingUser?.memberId) {
-    const linked = await prisma.member.findUnique({ where: { id: existingUser.memberId } });
-    if (linked) {
-      return res.status(400).json({ error: 'This email is already used by another login' });
+  const existingUser = email ? await prisma.user.findUnique({ where: { email } }) : null;
+  if (email) {
+    const existingEmail = await prisma.member.findUnique({ where: { email } });
+    if (existingEmail) {
+      return res.status(400).json({ error: 'A member with this email already exists' });
+    }
+    if (existingUser && existingUser.role !== 'MEMBER') {
+      return res.status(400).json({ error: 'This email is already used by a staff login' });
+    }
+    if (existingUser?.memberId) {
+      const linked = await prisma.member.findUnique({ where: { id: existingUser.memberId } });
+      if (linked) {
+        return res.status(400).json({ error: 'This email is already used by another login' });
+      }
     }
   }
 
   const password = body.password || '123456';
-  const passwordHash = await bcrypt.hash(password, 10);
+  const passwordHash = email ? await bcrypt.hash(password, 10) : null;
   const joinDate = parseIsoDate(body.joinDate) || todayIso();
   const planStartDate = parseIsoDate(body.planStartDate) || joinDate;
   const expiryDate = addPlanDuration(planStartDate, plan.duration);
@@ -155,11 +170,12 @@ router.post('/members', requirePermission('members', 'write'), async (req, res) 
           name,
           email,
           phone,
-          whatsapp: body.whatsapp || phone,
+          whatsapp: body.whatsapp || phone || undefined,
           dateOfBirth: body.dateOfBirth,
-          address: body.address,
+          address: shortAddress(body.address),
+          aadhaar,
           passwordHash,
-          photo: body.photo || '',
+          photo: typeof body.photo === 'string' ? body.photo : '',
           joinDate,
           expiryDate,
           planId: plan.id,
@@ -180,21 +196,23 @@ router.post('/members', requirePermission('members', 'write'), async (req, res) 
         },
       });
 
-      if (existingUser) {
-        await tx.user.update({
-          where: { id: existingUser.id },
-          data: { passwordHash, name, role: 'MEMBER', memberId: id },
-        });
-      } else {
-        await tx.user.create({
-          data: {
-            email,
-            passwordHash,
-            name,
-            role: 'MEMBER',
-            memberId: id,
-          },
-        });
+      if (email && passwordHash) {
+        if (existingUser) {
+          await tx.user.update({
+            where: { id: existingUser.id },
+            data: { passwordHash, name, role: 'MEMBER', memberId: id },
+          });
+        } else {
+          await tx.user.create({
+            data: {
+              email,
+              passwordHash,
+              name,
+              role: 'MEMBER',
+              memberId: id,
+            },
+          });
+        }
       }
 
       const membership = await tx.membership.create({
@@ -242,7 +260,7 @@ router.post('/members', requirePermission('members', 'write'), async (req, res) 
     res.json(toClientMember(created));
   } catch (err) {
     if (prismaErrorCode(err) === 'P2002') {
-      return res.status(400).json({ error: 'A member with this email already exists' });
+      return res.status(400).json({ error: 'A member with this Aadhaar or email already exists' });
     }
     console.error(err);
     return res.status(500).json({ error: 'Could not create member. Try again.' });
@@ -252,12 +270,25 @@ router.post('/members', requirePermission('members', 'write'), async (req, res) 
 router.put('/members/:id', requirePermission('members', 'write'), async (req, res) => {
   const { id } = req.params;
   const body = req.body;
-  if (body.email !== undefined && !isValidEmail(String(body.email || ''))) {
-    return res.status(400).json({ error: 'Enter a valid email address' });
+  const nextEmail = body.email !== undefined
+    ? (String(body.email || '').trim().toLowerCase() || null)
+    : undefined;
+  const nextPhone = body.phone !== undefined
+    ? (String(body.phone || '').trim() ? String(body.phone).replace(/\D/g, '').slice(-10) : '')
+    : undefined;
+  if (nextEmail && !isValidEmail(nextEmail)) {
+    return res.status(400).json({ error: 'Enter a valid email address, or leave email blank' });
   }
-  if (body.phone !== undefined && !isValidIndianPhone(String(body.phone || ''))) {
-    return res.status(400).json({ error: 'Enter a valid 10-digit Indian mobile number' });
+  if (nextPhone && !isValidIndianPhone(nextPhone)) {
+    return res.status(400).json({ error: 'Enter a valid 10-digit Indian mobile, or leave phone blank' });
   }
+  const nextAadhaar = body.aadhaar !== undefined
+    ? normalizeAadhaar(body.aadhaar)
+    : undefined;
+  if (nextAadhaar && !isValidAadhaar(nextAadhaar)) {
+    return res.status(400).json({ error: 'Enter a 12-digit Aadhaar number, or leave it blank' });
+  }
+  const nextAddress = body.address !== undefined ? shortAddress(body.address) : undefined;
   const joinDate = body.joinDate !== undefined && body.joinDate !== '' ? parseIsoDate(body.joinDate) : undefined;
   const planStartDate = body.planStartDate !== undefined && body.planStartDate !== '' ? parseIsoDate(body.planStartDate) : undefined;
   if (body.joinDate && !joinDate) return res.status(400).json({ error: 'Enter a valid joining date' });
@@ -265,6 +296,18 @@ router.put('/members/:id', requirePermission('members', 'write'), async (req, re
   try {
   const existing = await prisma.member.findUnique({ where: { id } });
   if (!existing) return res.status(404).json({ error: 'Not found' });
+  if (nextEmail) {
+    const emailTaken = await prisma.member.findFirst({ where: { email: nextEmail, NOT: { id } } });
+    if (emailTaken) {
+      return res.status(400).json({ error: 'A member with this email already exists' });
+    }
+  }
+  if (nextAadhaar) {
+    const aadhaarTaken = await prisma.member.findFirst({ where: { aadhaar: nextAadhaar, NOT: { id } } });
+    if (aadhaarTaken) {
+      return res.status(400).json({ error: 'A member with this Aadhaar number already exists' });
+    }
+  }
 
   const nextPlanId = body.planId || existing.planId;
   let nextExpiry: string | undefined;
@@ -282,11 +325,12 @@ router.put('/members/:id', requirePermission('members', 'write'), async (req, re
     where: { id },
     data: {
       name: body.name,
-      email: body.email,
-      phone: body.phone,
+      email: nextEmail,
+      phone: nextPhone,
       whatsapp: body.whatsapp,
       dateOfBirth: body.dateOfBirth,
-      address: body.address,
+      address: nextAddress,
+      aadhaar: body.aadhaar !== undefined ? nextAadhaar : undefined,
       photo: body.photo,
       joinDate: joinDate ?? undefined,
       expiryDate: nextExpiry ?? undefined,
@@ -330,12 +374,22 @@ router.put('/members/:id', requirePermission('members', 'write'), async (req, re
   }
 
   const linkedUser = await prisma.user.findUnique({ where: { memberId: id } });
-  if (linkedUser && (body.email || body.name)) {
+  if (linkedUser && (nextEmail || body.name)) {
     await prisma.user.update({
       where: { id: linkedUser.id },
       data: {
-        email: body.email || linkedUser.email,
+        ...(nextEmail ? { email: nextEmail } : {}),
         name: body.name || linkedUser.name,
+      },
+    });
+  } else if (!linkedUser && nextEmail) {
+    await prisma.user.create({
+      data: {
+        email: nextEmail,
+        passwordHash: existing.passwordHash || await bcrypt.hash('123456', 10),
+        name: body.name || existing.name,
+        role: 'MEMBER',
+        memberId: id,
       },
     });
   }
@@ -344,7 +398,7 @@ router.put('/members/:id', requirePermission('members', 'write'), async (req, re
   res.json(toClientMember(updated));
   } catch (err) {
     if (prismaErrorCode(err) === 'P2002') {
-      return res.status(400).json({ error: 'A member with this email already exists' });
+      return res.status(400).json({ error: 'A member with this Aadhaar or email already exists' });
     }
     console.error(err);
     return res.status(500).json({ error: 'Could not update member. Try again.' });

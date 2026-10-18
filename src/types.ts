@@ -89,6 +89,7 @@ export interface Member {
   occupation?: string;
   alcoholic?: boolean;
   notes?: string;
+  aadhaar?: string;
   status: MemberDbStatus;
   emergencyContact: {
     name: string;
