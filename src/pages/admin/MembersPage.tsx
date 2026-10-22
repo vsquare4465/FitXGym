@@ -54,20 +54,16 @@ export default function MembersPage() {
   const planPrice = selectedPlan?.price || 0;
   const discountValue = parseOptionalAmount(form.discount).value || 0;
   const chargedDue = Math.max(0, planPrice - Math.min(discountValue, planPrice));
+  const planStart = form.planStartDate || form.joinDate;
+  const expiryDate = selectedPlan && planStart
+    ? addPlanDuration(planStart, selectedPlan.duration)
+    : '';
 
   useEffect(() => {
     if (selectedPlanId && selectedPlanId !== form.planId) {
       setForm(f => ({ ...f, planId: selectedPlanId }));
     }
   }, [selectedPlanId, form.planId]);
-
-  useEffect(() => {
-    if (!selectedPlan) return;
-    const start = form.planStartDate || form.joinDate;
-    if (!start) return;
-    const expiry = addPlanDuration(start, selectedPlan.duration);
-    setForm(f => (f.expiryDate === expiry ? f : { ...f, expiryDate: expiry }));
-  }, [selectedPlanId, selectedPlan?.duration, form.joinDate, form.planStartDate]);
 
   const enriched = useMemo(() => {
     return (members as Member[]).map(m => ({
@@ -153,8 +149,8 @@ export default function MembersPage() {
         weight: form.weight.trim() || undefined,
         notes: form.notes.trim() || undefined,
         joinDate: form.joinDate,
-        planStartDate: form.planStartDate || form.joinDate,
-        expiryDate: form.expiryDate,
+        planStartDate: planStart,
+        expiryDate,
       });
       setShowAdd(false);
       setForm({ ...EMPTY_ADD, planId: planList[0]?.id || '' });
@@ -187,7 +183,7 @@ export default function MembersPage() {
           <p className="text-sm text-zinc-500">{members.length} total · {filtered.length} shown</p>
         </div>
         {can('members', 'write') && (
-          <button type="button" onClick={() => { const today = todayISO(); setForm({ ...EMPTY_ADD, planId: planList[0]?.id || '', joinDate: today, planStartDate: today }); setFormError(''); setShowAdd(true); }} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-orange-600 text-black text-sm font-semibold">
+          <button type="button" onClick={() => { const today = todayISO(); const planId = planList[0]?.id || ''; const plan = planList.find(p => p.id === planId); setForm({ ...EMPTY_ADD, planId, joinDate: today, planStartDate: today, expiryDate: plan ? addPlanDuration(today, plan.duration) : '' }); setFormError(''); setShowAdd(true); }} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-orange-600 text-black text-sm font-semibold">
             <Plus size={16} /> Add member
           </button>
         )}
@@ -334,15 +330,15 @@ export default function MembersPage() {
               {!selectedPlanId && <option value="">Select a plan</option>}
               {planList.map(p => <option key={p.id} value={p.id}>{p.name} – ₹{p.price}</option>)}
             </select>
-            <p className="text-xs text-zinc-500">For past members, set the real joining and plan start dates. Expiry is calculated from the plan duration.</p>
+            <p className="text-xs text-zinc-500">Expiry fills in from joining date + plan duration. Change joining date for past members.</p>
             <label className="block text-xs text-zinc-500">Joining date
-              <input type="date" value={form.joinDate} onChange={e => setForm({ ...form, joinDate: e.target.value, planStartDate: form.planStartDate === form.joinDate || !form.planStartDate ? e.target.value : form.planStartDate })} className="mt-1 w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm text-white" />
+              <input type="date" value={form.joinDate} onChange={e => setForm({ ...form, joinDate: e.target.value, planStartDate: e.target.value })} className="mt-1 w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm text-white" />
             </label>
             <label className="block text-xs text-zinc-500">Plan start date
               <input type="date" value={form.planStartDate} onChange={e => setForm({ ...form, planStartDate: e.target.value })} className="mt-1 w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm text-white" />
             </label>
-            <label className="block text-xs text-zinc-500">Expiry date (from {selectedPlan?.duration || 'plan'})
-              <input type="date" readOnly value={form.expiryDate} className="mt-1 w-full px-3 py-2 rounded-lg bg-zinc-950/70 border border-zinc-700 text-sm text-zinc-300" />
+            <label className="block text-xs text-zinc-500">Expiry date (auto: joining / plan start + {selectedPlan?.duration || 'plan'})
+              <input type="date" readOnly value={expiryDate} className="mt-1 w-full px-3 py-2 rounded-lg bg-zinc-950/70 border border-zinc-700 text-sm text-zinc-300" />
             </label>
             {form.membershipType === 'Paid' && (
               <>
