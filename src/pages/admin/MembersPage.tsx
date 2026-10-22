@@ -310,7 +310,7 @@ export default function MembersPage() {
             <input required placeholder="Full name" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
             <input inputMode="numeric" placeholder="10-digit mobile (optional)" value={form.phone} onChange={e => { setForm({ ...form, phone: e.target.value }); setFormError(''); }} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
             <input inputMode="numeric" maxLength={12} placeholder="Aadhaar (optional, 12 digits)" value={form.aadhaar} onChange={e => { setForm({ ...form, aadhaar: digitsOnly(e.target.value).slice(0, 12) }); setFormError(''); }} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
-            <input maxLength={80} placeholder="Locality / area (e.g. Senthli, Khurja)" value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
+            <input maxLength={80} placeholder="Address (area / locality, e.g. Senthli, Khurja)" value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
             <div className="grid grid-cols-2 gap-2">
               {(['Male', 'Female'] as const).map(g => (
                 <label key={g} className={`flex items-center justify-center gap-2 py-2 rounded-lg border text-sm cursor-pointer ${form.gender === g ? 'border-orange-500 bg-orange-600/15 text-orange-300' : 'border-zinc-700 text-zinc-400'}`}>

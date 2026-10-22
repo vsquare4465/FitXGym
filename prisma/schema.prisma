@@ -78,7 +78,7 @@ model Member {
   occupation          String?
   alcoholic           Boolean        @default(false)
   notes               String?
-  aadhaar             String?        @unique
+  aadhaar             String?
   idProofUrl          String?
   qrCodeValue         String         @default("")
   weightHistory       Json           @default("[]")

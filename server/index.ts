@@ -69,7 +69,7 @@ if (isProd) {
     res.setHeader('X-Frame-Options', 'SAMEORIGIN');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     res.setHeader('X-DNS-Prefetch-Control', 'off');
-    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    res.setHeader('Permissions-Policy', 'camera=(self), microphone=(), geolocation=()');
     if (process.env.TRUST_PROXY === 'true') {
       res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     }

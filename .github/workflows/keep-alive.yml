@@ -17,4 +17,4 @@ jobs:
       - name: Ping health endpoint
         run: |
           curl -fsS --retry 2 --retry-delay 15 --max-time 90 \
-            https://fitxgymkhurja.com/api/health
+            https://fitx-gym.onrender.com/api/health

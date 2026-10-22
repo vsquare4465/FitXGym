@@ -393,7 +393,7 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
                 <div><dt className="text-zinc-500 text-xs">WhatsApp</dt><dd>{m.whatsapp || m.phone || '—'}</dd></div>
                 <div><dt className="text-zinc-500 text-xs">Aadhaar</dt><dd>{maskAadhaar(m.aadhaar)}</dd></div>
                 <div><dt className="text-zinc-500 text-xs">DOB</dt><dd>{m.dateOfBirth ? formatDate(m.dateOfBirth) : '-'}</dd></div>
-                <div className="col-span-2"><dt className="text-zinc-500 text-xs">Locality</dt><dd>{m.address || '-'}</dd></div>
+                <div className="col-span-2"><dt className="text-zinc-500 text-xs">Address</dt><dd>{m.address || '-'}</dd></div>
                 <div><dt className="text-zinc-500 text-xs">Emergency</dt><dd>{m.emergencyContact?.name || '-'} {m.emergencyContact?.phone}</dd></div>
                 <div><dt className="text-zinc-500 text-xs">Type</dt><dd>{MEMBERSHIP_TYPE_LABELS[m.membershipType || 'Paid']}</dd></div>
                 <div><dt className="text-zinc-500 text-xs">Gender</dt><dd>{m.gender || '-'}</dd></div>
@@ -522,7 +522,7 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
               <label className="block text-xs text-zinc-500">Expiry date (from plan duration)
                 <input type="date" readOnly value={editForm.expiryDate} className="mt-1 w-full px-3 py-2 rounded-lg bg-zinc-950/70 border border-zinc-700 text-sm text-zinc-300" />
               </label>
-              <input maxLength={80} placeholder="Locality / area (e.g. Senthli, Khurja)" value={editForm.address} onChange={e => setEditForm({ ...editForm, address: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
+              <input maxLength={80} placeholder="Address (area / locality, e.g. Senthli, Khurja)" value={editForm.address} onChange={e => setEditForm({ ...editForm, address: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
               <select value={editForm.membershipType} onChange={e => setEditForm({ ...editForm, membershipType: e.target.value as MembershipType })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm">
                 <option value="Paid">Paid member</option>
                 <option value="Complimentary">Complimentary (free / known person)</option>
