@@ -1,0 +1,73 @@
+# Runs on the gym PC. Postgres stays private. Cloudflare's free tunnel is the public door.
+# See GO-LIVE.md.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: fitx
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: fitxgym
+    volumes:
+      - fitx_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fitx -d fitxgym"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  setup:
+    build:
+      context: .
+      target: build
+    environment:
+      NODE_ENV: production
+      SEED_DEMO_DATA: "false"
+      DATABASE_URL: postgresql://fitx:${POSTGRES_PASSWORD}@postgres:5432/fitxgym
+      SEED_OWNER1_EMAIL: ${SEED_OWNER1_EMAIL}
+      SEED_OWNER1_PASSWORD: ${SEED_OWNER1_PASSWORD}
+      SEED_OWNER1_NAME: ${SEED_OWNER1_NAME:-Owner}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    command: sh -c "npx prisma db push --skip-generate && npx tsx prisma/seed.ts"
+
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "3001"
+      TRUST_PROXY: "true"
+      DIST_PATH: /app/dist
+      DATABASE_URL: postgresql://fitx:${POSTGRES_PASSWORD}@postgres:5432/fitxgym
+      JWT_SECRET: ${JWT_SECRET}
+      PUBLIC_SITE_URL: ${PUBLIC_SITE_URL}
+      SEED_DEMO_DATA: "false"
+      SEED_OWNER1_EMAIL: ${SEED_OWNER1_EMAIL}
+      SEED_OWNER1_PASSWORD: ${SEED_OWNER1_PASSWORD}
+      SEED_OWNER1_NAME: ${SEED_OWNER1_NAME:-Owner}
+      SMTP_HOST: ${SMTP_HOST:-smtpout.secureserver.net}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USER: ${SMTP_USER:-deepaksolanki@fitxgymkhurja.com}
+      SMTP_PASS: ${SMTP_PASS:-}
+      OTP_FROM_EMAIL: ${OTP_FROM_EMAIL:-Fit X Gym <deepaksolanki@fitxgymkhurja.com>}
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    expose:
+      - "3001"
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - app
+
+volumes:
+  fitx_pg_data:

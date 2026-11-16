@@ -1,3 +1,5 @@
+# Retired. The live site is the Cloudflare Worker (wrangler.jsonc / GO-LIVE.md).
+# Left here only so an existing Render Postgres blueprint is not orphaned in git.
 # Render Blueprint — https://render.com/docs/blueprint-spec
 services:
   - type: web
