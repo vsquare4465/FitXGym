@@ -1,6 +1,6 @@
-import bcrypt from 'bcryptjs';
-import { prisma } from '../db.js';
-import { isProd } from './config.js';
+import bcrypt from '@fitx/password';
+import { prisma } from '@fitx/db';
+import { isProd } from '@fitx/config';
 
 /** Keep only the owner email/password from Render (SEED_OWNER1_*). Do not rename or replace that account. */
 export async function ensureProductionOwners() {

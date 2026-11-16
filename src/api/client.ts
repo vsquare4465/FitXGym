@@ -33,7 +33,7 @@ export async function api<T>(
   }
 
   const res = await fetch(`/api${path}`, { ...init, headers });
-  const data = await res.json().catch(() => ({}));
+  const data = await res.json().catch(() => ({})) as { error?: string };
   if (!res.ok) {
     throw new ApiError(res.status, data.error || res.statusText);
   }

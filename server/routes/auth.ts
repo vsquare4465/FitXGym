@@ -1,12 +1,12 @@
 import { Router } from 'express';
-import bcrypt from 'bcryptjs';
-import { prisma } from '../db.js';
-import { authMiddleware, buildAuthUser, signToken } from '../middleware/auth.js';
+import bcrypt from '@fitx/password';
+import { prisma, atomic } from '@fitx/db';
+import { authMiddleware, buildAuthUser, signToken, requireRole } from '../middleware/auth.js';
 import { isAdminRole } from '../lib/permissions.js';
-import { rateLimit } from '../lib/rateLimit.js';
+import { rateLimit } from '@fitx/rateLimit';
 import { createPasswordOtp, verifyAndConsumeOtp, OTP_EXPIRES_MINUTES } from '../lib/passwordOtp.js';
 import { isValidEmail, normalizeStaffPhone } from '../lib/validation.js';
-import { deliverPasswordOtp, otpNotConfiguredMessage } from '../lib/otpDelivery.js';
+import { deliverPasswordOtp, otpNotConfiguredMessage, verifyOtpEmailConnection } from '../lib/otpDelivery.js';
 
 const router = Router();
 const loginLimiter = rateLimit({
@@ -97,7 +97,7 @@ router.post('/login', loginLimiter, async (req, res) => {
     const hash = member.passwordHash || await bcrypt.hash('123456', 10);
     user = await prisma.user.create({
       data: {
-        email: member.email,
+        email: member.email || `${member.id.toLowerCase()}@members.fitx.invalid`,
         passwordHash: hash,
         name: member.name,
         role: 'MEMBER',
@@ -272,6 +272,15 @@ router.post('/logout', authMiddleware, async (req, res) => {
     data: { message: `SECURITY: ${req.user!.name} logged out` },
   });
   res.json({ ok: true });
+});
+
+router.post('/check-email', authMiddleware, requireRole('OWNER'), async (_req, res) => {
+  try {
+    await verifyOtpEmailConnection();
+    return res.json({ ok: true, message: 'Mailbox connection and authentication verified. No email was sent.' });
+  } catch (err) {
+    return res.status(503).json({ error: 'Could not connect to the mailbox. Check its password and SMTP settings.', code: (err as any).connectionCode || 'NOT_CONFIGURED', stage: (err as any).stage || '', detail: (err as any).detail || '' });
+  }
 });
 
 router.use((_req, res) => {

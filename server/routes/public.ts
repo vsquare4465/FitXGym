@@ -1,8 +1,9 @@
 import { Router } from 'express';
-import bcrypt from 'bcryptjs';
-import { prisma } from '../db.js';
+import { mediaUploads } from '@fitx/media';
+import bcrypt from '@fitx/password';
+import { prisma, atomic } from '@fitx/db';
 import { toClientMember } from '../lib/memberMapper.js';
-import { rateLimit } from '../lib/rateLimit.js';
+import { rateLimit } from '@fitx/rateLimit';
 import { nextMemberId } from '../lib/memberId.js';
 import { isValidEmail, isValidIndianPhone } from '../lib/validation.js';
 import { istNowTime, istToday, minutesBetweenIst } from '../lib/ist.js';
@@ -94,7 +95,7 @@ router.post('/leads', formLimiter, async (req, res) => {
   res.json(lead);
 });
 
-router.post('/register', async (req, res) => {
+router.post('/register', formLimiter, mediaUploads, async (req, res) => {
   const { member, planPrice, paymentMethod } = req.body;
   if (!member?.name?.trim()) {
     return res.status(400).json({ error: 'Name is required' });
@@ -112,7 +113,8 @@ router.post('/register', async (req, res) => {
   const joinDate = member.joinDate || istToday();
   const expiryDate = plan ? addPlanDuration(joinDate, plan.duration) : (member.expiryDate || addPlanDuration(joinDate, '1 Month'));
 
-  const created = await prisma.member.create({
+  const created = await atomic(async (tx) => {
+  const created = await tx.member.create({
     data: {
       id,
       name: member.name,
@@ -139,7 +141,7 @@ router.post('/register', async (req, res) => {
     },
   });
 
-  await prisma.user.create({
+  await tx.user.create({
     data: {
       email: member.email,
       passwordHash,
@@ -149,7 +151,7 @@ router.post('/register', async (req, res) => {
     },
   });
 
-  const membership = await prisma.membership.create({
+  const membership = await tx.membership.create({
     data: {
       memberId: created.id,
       planId: member.planId,
@@ -162,7 +164,7 @@ router.post('/register', async (req, res) => {
   });
 
   if (planPrice > 0) {
-    await prisma.payment.create({
+    await tx.payment.create({
       data: {
         memberId: created.id,
         memberName: created.name,
@@ -176,6 +178,9 @@ router.post('/register', async (req, res) => {
       },
     });
   }
+
+    return created;
+  });
 
   await prisma.auditLog.create({
     data: { message: `REGISTRATION: ${created.name} (${created.id}) registered` },

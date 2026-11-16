@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import bcrypt from 'bcryptjs';
-import { prisma } from '../db.js';
+import bcrypt from '@fitx/password';
+import { prisma, atomic } from '@fitx/db';
 import { authMiddleware, requireAdmin, requirePermission } from '../middleware/auth.js';
 import { UserRole } from '@prisma/client';
 import { AdminPermissions, isAdminRole, resolvePermissions } from '../lib/permissions.js';

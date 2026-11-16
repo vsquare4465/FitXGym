@@ -1,6 +1,13 @@
 node_modules/
 build/
 dist/
+server-dist/
+.wrangler/
+cloudflare/generated/
+.dev.vars*
+!.dev.vars.example
+*.db
+*.db-journal
 coverage/
 .DS_Store
 *.log

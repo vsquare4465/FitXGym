@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { prisma } from '../db.js';
+import { mediaUploads } from '@fitx/media';
+import { prisma, atomic } from '@fitx/db';
 import { authMiddleware, requireRole } from '../middleware/auth.js';
 import { toClientMember } from '../lib/memberMapper.js';
 import { istToday } from '../lib/ist.js';
@@ -9,6 +10,7 @@ import { daysUntil } from '../lib/dateRange.js';
 const router = Router();
 router.use(authMiddleware);
 router.use(requireRole('MEMBER'));
+router.use(mediaUploads);
 
 router.get('/me', async (req, res) => {
   const member = await prisma.member.findUnique({ where: { id: req.user!.memberId! } });
@@ -53,12 +55,13 @@ router.post('/renew', async (req, res) => {
   const base = daysUntil(member.expiryDate) >= 0 ? member.expiryDate : formattedToday;
   const formattedExpiry = plan ? addPlanDuration(base, plan.duration) : addPlanDuration(base, '1 Month');
 
-  const updated = await prisma.member.update({
+  const updated = await atomic(async (tx) => {
+  const updated = await tx.member.update({
     where: { id: memberId },
     data: { expiryDate: formattedExpiry, planId, status: 'Active' },
   });
 
-  await prisma.membership.create({
+  await tx.membership.create({
     data: {
       memberId,
       planId,
@@ -68,7 +71,7 @@ router.post('/renew', async (req, res) => {
     },
   });
 
-  await prisma.payment.create({
+  await tx.payment.create({
     data: {
       memberId,
       memberName: member.name,
@@ -79,6 +82,9 @@ router.post('/renew', async (req, res) => {
       status: 'Completed',
       invoiceNo: `FTX-REN-${Math.floor(1000 + Math.random() * 9000)}`,
     },
+  });
+
+    return updated;
   });
 
   res.json(toClientMember(updated));

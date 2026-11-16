@@ -1,4 +1,4 @@
-import { prisma } from '../db.js';
+import { prisma } from '@fitx/db';
 import { resolveDateRange, inRange, daysUntil, monthKey, type DateRange } from './dateRange.js';
 import { istToday } from './ist.js';
 import { computeMemberDisplayStatus, memberHasPendingPayment } from './memberStatus.js';

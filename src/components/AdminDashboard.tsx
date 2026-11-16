@@ -1,3 +1,4 @@
+import { imageUpload } from '../lib/imageUpload';
 import React, { useState } from 'react';
 import { Member, Staff, Expense, InventoryItem, Payment, AttendanceRecord, Plan, Review } from '../types';
 import { MEMBERSHIP_PLANS } from '../data/mockData';
@@ -121,49 +122,40 @@ export default function AdminDashboard({
   const [selectedMarketingMembers, setSelectedMarketingMembers] = useState<string[]>([]);
 
   // Admin Profile & Gallery upload handlers
-  const handleOwnerPhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleOwnerPhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        if (typeof reader.result === 'string') {
-          onUpdateOwnerPhoto(reader.result);
-          onAddAuditLog(`PROFILE: ${adminRole} updated gym owner profile photograph.`);
-          alert("Profile photo updated successfully!");
-        }
-      };
-      reader.readAsDataURL(file);
-    }
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const image = await imageUpload(file);
+      await onUpdateOwnerPhoto(image);
+      await onAddAuditLog(`PROFILE: ${adminRole} updated gym owner profile photograph.`);
+      alert('Profile photo updated successfully!');
+    } catch (error) { alert(error instanceof Error ? error.message : 'Could not save image.'); }
   };
 
-  const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        if (typeof reader.result === 'string') {
-          onUpdateLogoUrl(reader.result);
-          onAddAuditLog(`BRAND: ${adminRole} updated gym brand logo visual.`);
-          alert("Gym Brand Logo updated successfully!");
-        }
-      };
-      reader.readAsDataURL(file);
-    }
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const image = await imageUpload(file);
+      await onUpdateLogoUrl(image);
+      await onAddAuditLog(`BRAND: ${adminRole} updated gym brand logo visual.`);
+      alert('Gym logo updated successfully!');
+    } catch (error) { alert(error instanceof Error ? error.message : 'Could not save image.'); }
   };
 
-  const handleGalleryPhotoAdd = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (files && files.length > 0) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        if (typeof reader.result === 'string') {
-          onUpdateGallery([...gallery, reader.result]);
-          onAddAuditLog(`GALLERY: ${adminRole} added a new visual image to the gym gallery.`);
-          alert("Gallery image added successfully!");
-        }
-      };
-      reader.readAsDataURL(files[0]);
-    }
+  const handleGalleryPhotoAdd = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const image = await imageUpload(file);
+      await onUpdateGallery([...gallery, image]);
+      await onAddAuditLog(`GALLERY: ${adminRole} added a new visual image to the gym gallery.`);
+      alert('Gallery image added successfully!');
+    } catch (error) { alert(error instanceof Error ? error.message : 'Could not save image.'); }
   };
 
   const handleGalleryPhotoDelete = (indexToDelete: number) => {

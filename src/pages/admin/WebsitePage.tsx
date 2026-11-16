@@ -1,3 +1,4 @@
+import { imageUpload } from '../../lib/imageUpload';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle, Eye, Globe, Pencil, Save, Trash2, Upload } from 'lucide-react';
 import { dedupeGalleryByUrl } from '../../lib/galleryUtils';
@@ -206,6 +207,8 @@ export default function WebsitePage() {
       });
       setDraftSaved(true);
       setTimeout(() => setDraftSaved(false), 2500);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Could not save changes. Please try again.");
     } finally {
       setSavingDraft(false);
     }
@@ -230,18 +233,21 @@ export default function WebsitePage() {
       setPublished(true);
       await refresh();
       setTimeout(() => setPublished(false), 3000);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Could not publish changes. Please try again.');
     } finally {
       setPublishing(false);
     }
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, field: string) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, field: string) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => setForm(prev => ({ ...prev, [field]: reader.result as string }));
-    reader.readAsDataURL(file);
     e.target.value = '';
+    if (!file) return;
+    try {
+      const value = await imageUpload(file);
+      setForm(prev => ({ ...prev, [field]: value }));
+    } catch (error) { alert(error instanceof Error ? error.message : 'Could not load image.'); }
   };
 
   const removeImageField = (field: string) => {
@@ -255,18 +261,14 @@ export default function WebsitePage() {
   const addGalleryImages = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files?.length) return;
-    Promise.all(Array.from(files).map(file => new Promise<GalleryImage>(resolve => {
-      const reader = new FileReader();
-      reader.onload = () => resolve({ url: reader.result as string, caption: '', active: true, featured: false, sortOrder: 0 });
-      reader.readAsDataURL(file);
-    }))).then(newItems => {
+    Promise.all(Array.from(files).map(async file => ({ url: await imageUpload(file), caption: '', active: true, featured: false, sortOrder: 0 } as GalleryImage))).then(newItems => {
       setGal(prev => {
         const existing = new Set(prev.map(g => g.url));
         const fresh = newItems.filter(item => !existing.has(item.url));
         if (fresh.length === 0) return prev;
         return [...prev, ...fresh.map((item, i) => ({ ...item, sortOrder: prev.length + i }))];
       });
-    });
+    }).catch(error => alert(error instanceof Error ? error.message : 'Could not load gallery images.'));
     e.target.value = '';
   };
 

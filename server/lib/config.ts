@@ -5,7 +5,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export const isProd = process.env.NODE_ENV === 'production';
 export const port = Number(process.env.PORT) || 3001;
-export const distPath = path.join(__dirname, '../../dist');
+export const distPath = process.env.DIST_PATH
+  ? path.resolve(process.env.DIST_PATH)
+  : path.join(__dirname, '../../dist');
 
 export function getAllowedOrigins(): string[] {
   return (process.env.ALLOWED_ORIGINS ?? '')
@@ -36,7 +38,7 @@ export function validateProductionEnv(): void {
   }
 
   if (process.env.TRUST_PROXY !== 'true') {
-    warnings.push('TRUST_PROXY is not "true" — recommended behind Render, Railway, Nginx, or Cloudflare');
+    warnings.push('TRUST_PROXY is not "true" — required behind Cloudflare');
   }
 
   if (!process.env.PUBLIC_SITE_URL) {

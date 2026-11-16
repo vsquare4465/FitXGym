@@ -1,0 +1,10 @@
+import fs from 'node:fs';
+const base = 'https://fitx-gym.vaishalivvarshney.workers.dev';
+const state = JSON.parse(fs.readFileSync('.wrangler/bootstrap-production.json','utf8'));
+const login = await fetch(`${base}/api/auth/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:state.email,password:state.password,loginType:'admin'})});
+if (!login.ok) throw new Error('Owner authentication failed');
+const {token} = await login.json();
+const result = await fetch(`${base}/api/auth/check-email`,{method:'POST',headers:{Authorization:`Bearer ${token}`},signal:AbortSignal.timeout(45000)});
+const body = await result.json();
+console.log(JSON.stringify({httpStatus:result.status,...body}));
+if (!result.ok) process.exitCode=1;

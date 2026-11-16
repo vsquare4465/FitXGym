@@ -18,9 +18,25 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "@fitx/db": [
+        "./server/db.ts"
+      ],
+      "@fitx/config": [
+        "./server/lib/config.ts"
+      ],
+      "@fitx/password": [
+        "./node_modules/bcryptjs"
+      ],
+      "@fitx/rateLimit": [
+        "./server/lib/rateLimit.ts"
+      ],
+      "@fitx/media": [
+        "./server/lib/media.ts"
       ]
     },
     "allowImportingTsExtensions": true,
-    "noEmit": true
+    "noEmit": true,
+    "resolveJsonModule": true
   }
 }

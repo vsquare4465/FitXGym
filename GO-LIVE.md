@@ -1,148 +1,121 @@
-# Fit X Gym — Go live checklist
+# Fit X Gym — Cloudflare deployment
 
-Use this short checklist to launch. Full hosting details: **[DEPLOY.md](./DEPLOY.md)**
+Fit X Gym runs entirely on Cloudflare: React static assets, an Express API on Workers, D1 for gym records, and KV for uploaded images/PDFs. Your PC can be off. No Render service, external PostgreSQL database, Container, or Tunnel is required.
 
----
+## Existing account and resources
 
-## Before you deploy
+- Account: `5462c982f4be958c61aba04069f0a333`
+- Worker: `fitx-gym`
+- D1: `fitx-gym-db` / `0949ab84-751d-406c-b6fd-6c3d89ca6074`
+- KV binding: `MEDIA`
+- Configuration: `wrangler.jsonc`
+- Owner credentials: `.wrangler/owner-login.txt` (private, ignored by Git). Change the password after first login.
 
-- [ ] **Domain** purchased (e.g. `fitxgym.in`)
-- [ ] **PostgreSQL** created (Neon, Supabase, or Railway Postgres)
-- [ ] **JWT secret** generated: `openssl rand -base64 32`
-- [ ] **Owner email/password** chosen for `SEED_OWNER1_*` (not demo passwords)
-- [ ] Project pushed to **GitHub** (private repo recommended)
+The database starts with the owner, membership plans, and website defaults. It has no old members/payments. Render data could not be recovered because no backup was available.
 
----
-
-## Environment variables (on your host)
-
-```env
-NODE_ENV=production
-DATABASE_URL=postgresql://...?sslmode=require
-JWT_SECRET=<your-32+-char-secret>
-PORT=3001
-TRUST_PROXY=true
-PUBLIC_SITE_URL=https://yourdomain.com
-SEED_DEMO_DATA=false
-SEED_OWNER1_EMAIL=you@yourdomain.com
-SEED_OWNER1_PASSWORD=A-Strong-Password-Here
-```
-
-Do **not** commit `.env` to git.
-
----
-
-## Deploy (pick one)
-
-### Render (easiest)
-
-You do **not** need Render Shell. Free plan has no Shell — that is expected.
-
-1. [render.com](https://render.com) → New → Blueprint → connect repo (`render.yaml` included)
-2. Set env vars (see below). Redeploy so `db:push` + `db:seed` run in the **build**.
-3. Settings → Custom Domains → add `yourdomain.com` and `www.yourdomain.com`
-4. Point DNS at GoDaddy (see **GoDaddy DNS** below)
-
-**If the first deploy already finished before seed was in the build**, create the owner account from your laptop (no Shell):
+## Update the app
 
 ```powershell
-# Render → your Postgres → Connections → External Database URL
-$env:DATABASE_URL="<External Database URL from Render, not Internal>"
-$env:NODE_ENV="production"
-$env:SEED_DEMO_DATA="false"
-$env:SEED_OWNER1_EMAIL="you@yourdomain.com"
-$env:SEED_OWNER1_PASSWORD="A-Strong-Password-Here"
-npm run db:seed
+npm ci
+npm run db:cf:remote
+npm run deploy:cf
 ```
 
-### GoDaddy DNS (Render)
+Wrangler builds the frontend and generates the Workers-specific Prisma client. Use `npm run types:cf` after changing bindings. Keep Workers on Free; do not enable Containers or upgrade the Workers subscription.
 
-1. Render → **fitx-gym** service → **Settings** → **Custom Domains** → add:
-   - `yourdomain.com`
-   - `www.yourdomain.com`
-2. Copy the exact records Render shows. Then in GoDaddy → **My Products** → domain → **DNS** → **DNS Records**:
-   - **www**: Type `CNAME`, Name `www`, Value `fitx-gym.onrender.com` (use *your* Render URL — no `https://`)
-   - **root (@)**: Type `A`, Name `@`, Value `216.24.57.1` (Render load balancer). GoDaddy does not support CNAME on `@`.
-3. Delete anything that fights this:
-   - Old `A` / `AAAA` records on `@`
-   - GoDaddy **Domain Forwarding** / parking page
-   - Parked-page `CNAME` on `www`
-4. Wait for Render to show the domain as **Verified** (minutes, sometimes a few hours). SSL is automatic after that.
-
-Then set `PUBLIC_SITE_URL=https://yourdomain.com` in Render env vars and redeploy.
-
-### Railway
-
-1. [railway.app](https://railway.app) → New project → GitHub repo
-2. Add **PostgreSQL** plugin
-3. Variables: `NODE_ENV=production`, `JWT_SECRET`, `TRUST_PROXY=true`, `PUBLIC_SITE_URL`
-4. Shell once: `npm run db:seed`
-
-### VPS / own server
-
-See **Option C** in [DEPLOY.md](./DEPLOY.md) (PM2 + Nginx + Certbot).
-
----
-
-## After deploy (first 15 minutes)
-
-| Step | Action |
-|------|--------|
-| 1 | Open `https://yourdomain.com/api/health` → `{ "status": "ok", "db": "ok" }` |
-| 2 | Login `https://yourdomain.com/admin/login` with seed owner email |
-| 3 | **Profile** → change password immediately |
-| 4 | **Website** → upload logo, edit text, gallery → **Publish** |
-| 5 | **Plans** → confirm prices match your gym |
-| 6 | **Attendance** → copy/print QR poster (uses your live domain) |
-| 7 | Submit test enquiry on `/` → check **Leads** in admin |
-| 8 | Add a real member (not demo data) |
-
----
-
-## Verify locally before pushing (optional)
+## Local Cloudflare development
 
 ```powershell
-# PowerShell — simulate production on your machine
-$env:NODE_ENV="production"
-$env:JWT_SECRET="<your-secret>"
-$env:DATABASE_URL="<your-neon-url>"
-$env:TRUST_PROXY="true"
-npm run build
-npm run prod:check
-npm start
-# Open http://localhost:3001
+npm run setup:cf:local
+npm run dev:cf
 ```
 
----
+In another terminal:
 
-## Production vs development seed
+```powershell
+npm run test:cf
+```
 
-| | Development | Production |
-|---|-------------|------------|
-| Owner accounts | Created/updated | Created/updated |
-| Plans & website defaults | Full upsert | **Only missing keys** (won't overwrite your edits) |
-| Demo members/payments | Loaded | **Skipped** unless `SEED_DEMO_DATA=true` |
-| Gallery | Reset if demo | Only if gallery is empty |
-| QR token | Created if none | Created if none |
+This uses separate local D1/KV data and `.dev.vars`. The older Node/Postgres development commands remain available for that environment. Production uses `prisma/schema.d1.prisma`, generated from `prisma/schema.prisma`; do not run `prisma db push` against D1.
 
-**Never run `db:seed` on a live site with real data unless you know what it does.** It is safe for owners/plans; it will not wipe website content in production.
+`npm run setup:cf:remote` is a first-time initializer. It preserves an existing owner and uses ignored bootstrap state; do not delete that state and rerun against an initialized database, because its secrets protect existing logins.
 
----
+## Activate fitxgymkhurja.com
 
-## Monthly cost (India, approximate)
+On 14 November 2026, the GoDaddy nameservers were changed successfully to Cloudflare, and public DNS confirmed both assigned nameservers. Cloudflare subsequently activated the zone; both custom-domain HTTPS addresses and HTTP redirects passed live verification. The registrar setup was:
 
-| Item | Cost |
-|------|------|
-| Domain | ₹500–800/year |
-| Render / Railway | ₹400–1,200/month |
-| Neon Postgres free tier | ₹0 to start |
-| Cloudflare (optional) | Free |
+1. Open Domain Portfolio → fitxgymkhurja.com → DNS → Nameservers.
+2. Choose **Change Nameservers → I'll use my own nameservers**.
+3. Set exactly `keanu.ns.cloudflare.com` and `vera.ns.cloudflare.com`.
+4. Save and complete any registrar verification.
+5. In Cloudflare, wait for the zone to become **Active**. MX, SPF, DMARC, and the email CNAME were verified. The two missing GoDaddy DKIM CNAMEs were restored and verified directly against Cloudflare's authoritative nameserver.
+6. The Worker routes fitxgymkhurja.com/* and www.fitxgymkhurja.com/* are declared in wrangler.jsonc. In Cloudflare DNS, ensure the existing website A/AAAA/CNAME records have Proxy status set to Proxied (orange cloud). The Worker handles all matching requests, so it does not contact the old Render origin. Preserve MX/TXT records.
 
----
+Both website DNS records were verified as **Proxied** in the Cloudflare dashboard. **Always Use HTTPS** is now enabled. Universal SSL is enabled and HTTPS now works on both the root domain and www. The Workers-provided HTTPS address works independently of domain activation. Both custom-domain `/api/health` responses were verified with healthy D1 connectivity after activation. Print a fresh QR attendance poster using the final public domain.
 
-## Need help?
+## Email and WhatsApp
 
-- Build fails → check Render/Railway logs; run `npm run build` locally
-- 503 on `/api/health` → `DATABASE_URL` wrong or DB not reachable
-- Blank website → run `npm run build` on deploy; check `dist/` exists
-- Can't login → re-run seed once with correct `SEED_OWNER1_*` env vars
+Password reset generation and one-time verification run in D1. Owners can generate a reset code from **Team → Reset code** without an email service.
+
+Automatic email delivery needs an existing mailbox password or a verified Resend account. Configure secrets privately:
+
+```powershell
+npx wrangler secret put SMTP_PASS
+# Or, with a verified sending domain:
+npx wrangler secret put RESEND_API_KEY
+```
+
+The SMTP host/user/from address in wrangler.jsonc preserve the existing gym mailbox configuration. Automatic WhatsApp/SMS needs its own provider credentials; those providers may charge. The app does not buy or activate messaging services. Delivery cannot be verified until credentials are configured.
+
+## Free-tier capacity
+
+As checked against Cloudflare documentation on 13 November 2026:
+
+- Workers: 100,000 requests/day, 10 ms CPU per invocation. Static assets are served separately.
+- D1: 500 MB per database; 5 million rows read and 100,000 rows written per day.
+- KV uploads: 1 GB storage, 100,000 reads/day, 1,000 writes/day. Each uploaded file is limited by this app to 8 MB.
+
+Free-tier exhaustion causes operations to fail until limits reset; free hosting is not an unlimited availability guarantee. Domain renewals and any external messaging service remain separate. No paid hosting subscription is enabled by the project.
+
+Uploads use random capability URLs. Treat private photo/document URLs as confidential: anyone who possesses the URL can fetch the file. Removed/replaced uploads can remain in KV; review storage usage in the dashboard.
+
+## Backups and recovery
+
+Export D1 before important changes and periodically while using the gym system:
+
+```powershell
+npm run backup:cf
+```
+
+Or double-click `Backup Gym.cmd`. This creates a dated private ZIP under `.wrangler/backups` containing the D1 database, KV uploads and metadata, application source, and login-recovery secrets. Copy the ZIP and checksum somewhere private outside this PC. Follow `BACKUPS.md` for daily retention and recovery. D1 also provides Time Travel recovery within its current free-plan retention window; inspect it with `npx wrangler d1 time-travel info fitx-gym-db` before a restore. Do not publish backups or secrets.
+
+## Implementation notes
+
+- API paths and screens remain the same. Express 5 provides async error handling on Workers.
+- Native Web Crypto password hashes use PBKDF2-SHA256, a unique salt, 100,000 iterations, and an independent `AUTH_PEPPER` Worker secret. This is a fresh database; old bcrypt hashes were not imported.
+- `JWT_SECRET` and `AUTH_PEPPER` are secrets, not tracked configuration. Preserve the pepper when redeploying or existing passwords will stop verifying.
+- Multi-record member, renewal, registration, payment, and lead-conversion writes use atomic D1 batches. Bulk settings/gallery saves use bounded multi-row SQL statements.
+- Rate limiting is shared through D1. A daily Worker cron removes expired limiter rows and old reset codes.
+- The old `cloudflare/worker.js` Container implementation and Docker/Tunnel files are legacy alternatives and are not deployment entrypoints.
+
+Official limits: https://developers.cloudflare.com/workers/platform/limits/ , https://developers.cloudflare.com/d1/platform/limits/ , https://developers.cloudflare.com/kv/platform/pricing/
+
+## Verification on 13 November 2026
+
+Live URL: https://fitx-gym.vaishalivvarshney.workers.dev
+
+81 core API checks passed locally and in production. Another 22 production checks verified plan editing, phone-only member login, coaching messages, workout/diet records, profile/password changes, and SPA deep links. The public website and admin sign-in page were also checked in a browser. TypeScript passed. Automatic email/WhatsApp delivery requires provider secrets and was not included in delivery tests.
+
+Use npm run backup:cf to export D1 without printing a signed download URL. The initial backup is private under .wrangler/.
+
+## Final connection checks on 14 November 2026
+
+A 1 MB upload was persisted in KV and downloaded intact. The local server was stopped and the deployed app still reported healthy D1 connectivity. Production business tables were cleared of the explicitly created test rows; one owner login remains.
+
+SMTP_PASS is now an encrypted Worker secret. An owner-only connection test at POST /api/auth/check-email currently returns ESOCKET / CONN with a proxy connection failure, before SMTP authentication. No test email was sent. Automatic email OTP delivery remains unresolved; use Team-generated reset codes until the mailbox connection is fixed or a verified HTTP email provider is configured.
+
+The password was initially added as a plain variable, and Wrangler printed it while reporting dashboard configuration differences. Change that mailbox password at the email provider and update SMTP_PASS as a Secret. Do not store it as a Text variable or in tracked files.
+
+A direct Custom Domain attachment was rejected because Cloudflare manages an existing website record. Standard Worker routes are configured instead, preserving existing DNS. They require the domain zone to be Active and the website DNS record to be Proxied. The zone is now Active; both routes have passed live HTTPS and database-health checks.
+
+The final deployment successfully published both standard Worker routes: fitxgymkhurja.com/* and www.fitxgymkhurja.com/*. Live health remained ok with the local runtime stopped. Cloudflare OAuth permits managing the Worker/routes but did not permit reading DNS record details or subscriptions. The website proxy settings were subsequently verified through the signed-in dashboard; any pre-existing billing subscription was not independently verified. No paid plan was enabled during this migration.

@@ -1,2 +1,2 @@
-/** Feature flags. Cloudflare Pages hosting is parked until this is true on Render/Pages. */
+/** Unused. The live site is the Cloudflare Worker in cloudflare/worker.js. */
 export const CLOUDFLARE_PAGES = process.env.CLOUDFLARE_PAGES === 'true';

@@ -1,6 +1,6 @@
 import nodemailer from 'nodemailer';
-import { prisma } from '../db.js';
-import { isProd } from './config.js';
+import { prisma } from '@fitx/db';
+import { isProd } from '@fitx/config';
 import { normalizeWhatsAppNumber } from './whatsapp.js';
 
 const DEFAULT_FROM = 'Fit X Gym <deepaksolanki@fitxgymkhurja.com>';
@@ -77,6 +77,33 @@ async function sendViaSmtp(to: string, subject: string, text: string, html: stri
   throw new Error(lastError);
 }
 
+/** Authenticate the configured mailbox without sending an email. */
+export async function verifyOtpEmailConnection(): Promise<void> {
+  const pass = smtpPass();
+  if (!pass) throw new Error('Mailbox password is not configured');
+  let lastCode = 'UNKNOWN';
+  let lastStage = '';
+  let detail = '';
+  for (const attempt of smtpAttempts()) {
+    const transporter = nodemailer.createTransport({
+      ...attempt,
+      auth: { user: smtpUser(), pass },
+      connectionTimeout: 12000,
+      greetingTimeout: 12000,
+      socketTimeout: 15000,
+      tls: { minVersion: 'TLSv1.2' },
+    });
+    try { await transporter.verify(); return; }
+    catch (err) {
+      lastCode = String((err as any).code || (err as Error).name).slice(0,80);
+      lastStage = String((err as any).command || '').slice(0,80);
+      detail = String((err as Error).message || '').replaceAll(pass, '[redacted]').slice(0,240);
+    }
+    finally { transporter.close(); }
+  }
+  throw Object.assign(new Error('Mailbox connection failed'), { connectionCode: lastCode, stage: lastStage, detail });
+}
+
 async function sendViaResend(to: string, subject: string, text: string, html: string): Promise<void> {
   const resendKey = process.env.RESEND_API_KEY?.trim();
   if (!resendKey) throw new Error('RESEND_API_KEY is not set');
@@ -96,12 +123,7 @@ async function sendViaResend(to: string, subject: string, text: string, html: st
     }
   };
 
-  try {
-    await tryFrom(fromAddress());
-  } catch (err) {
-    console.warn('[otp] Resend custom from failed:', err instanceof Error ? err.message : err);
-    await tryFrom('Fit X Gym <beth.t@example.com>');
-  }
+  await tryFrom(fromAddress());
 }
 
 async function sendOtpEmail(to: string, subject: string, text: string, html: string): Promise<boolean> {
@@ -217,5 +239,5 @@ export async function deliverPasswordOtp(opts: {
 }
 
 export function otpNotConfiguredMessage(): string {
-  return 'Could not send the OTP. On Render add SMTP_PASS = the password of deepaksolanki@fitxgymkhurja.com (GoDaddy email). WhatsApp OTP also needs a mobile number on the staff profile plus WHATSAPP_TOKEN and WHATSAPP_PHONE_NUMBER_ID. Until that is set, open Team → Reset code and share the 6-digit code.';
+  return 'Could not send the OTP. Add SMTP_PASS (the GoDaddy mailbox password for deepaksolanki@fitxgymkhurja.com) as a Cloudflare secret. WhatsApp OTP also needs a mobile number on the staff profile plus WHATSAPP_TOKEN and WHATSAPP_PHONE_NUMBER_ID. Until that is set, open Team → Reset code and share the 6-digit code.';
 }

@@ -1,4 +1,4 @@
-import { prisma } from '../db.js';
+import { prisma } from '@fitx/db';
 
 type MemberIdSource = { member: { findMany: (args: { select: { id: true } }) => Promise<Array<{ id: string }>> } };
 

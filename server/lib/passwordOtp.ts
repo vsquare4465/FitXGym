@@ -1,10 +1,13 @@
-import bcrypt from 'bcryptjs';
-import { prisma } from '../db.js';
+import bcrypt from '@fitx/password';
+import { prisma } from '@fitx/db';
 
 const OTP_TTL_MS = 15 * 60 * 1000;
 
 export function generateOtp(): string {
-  return String(Math.floor(100000 + Math.random() * 900000));
+  // Rejection sampling avoids modulo bias and Math.random's predictability.
+  let value: number;
+  do { value = crypto.getRandomValues(new Uint32Array(1))[0]; } while (value >= 4294800000);
+  return String(100000 + (value % 900000));
 }
 
 export async function createPasswordOtp(email: string): Promise<string> {
@@ -38,8 +41,8 @@ export async function verifyAndConsumeOtp(email: string, code: string): Promise<
   const ok = await bcrypt.compare(otp, row.codeHash);
   if (!ok) return false;
 
-  await prisma.passwordOtp.update({ where: { id: row.id }, data: { used: true } });
-  return true;
+  const consumed = await prisma.passwordOtp.updateMany({ where: { id: row.id, used: false }, data: { used: true } });
+  return consumed.count === 1;
 }
 
 export const OTP_EXPIRES_MINUTES = 15;

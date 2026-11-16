@@ -10,7 +10,9 @@
     "dev:web": "vite --port=3000 --host=0.0.0.0",
     "dev:api": "tsx watch server/index.ts",
     "build": "vite build",
+    "build:server": "esbuild server/index.ts --bundle --platform=node --target=node20 --format=esm --outfile=server-dist/index.js --packages=external",
     "start": "tsx server/index.ts",
+    "deploy:cf": "wrangler deploy",
     "start:prod": "npm run build && cross-env NODE_ENV=production tsx server/index.ts",
     "prod:check": "cross-env NODE_ENV=production node scripts/prod-check.mjs",
     "preview": "vite preview",
@@ -19,19 +21,30 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:create-local": "powershell -ExecutionPolicy Bypass -File scripts/setup-local-postgres.ps1",
     "db:setup": "prisma db push && tsx prisma/seed.ts",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "build:cf": "node scripts/prepare-d1.mjs && prisma generate --schema prisma/schema.d1.prisma && vite build",
+    "dev:cf": "wrangler dev",
+    "db:cf:local": "wrangler d1 migrations apply fitx-gym-db --local",
+    "db:cf:remote": "wrangler d1 migrations apply fitx-gym-db --remote",
+    "test:cf": "node scripts/test-cloudflare.mjs",
+    "types:cf": "wrangler types cloudflare/worker-configuration.d.ts --include-runtime false --strict-vars false --include-main-module false",
+    "setup:cf:local": "tsx scripts/bootstrap-cloudflare.ts",
+    "setup:cf:remote": "tsx scripts/bootstrap-cloudflare.ts --remote",
+    "backup:cf": "node scripts/backup-cloudflare.mjs",
+    "test:cf:extra": "node scripts/test-cloudflare-extra.mjs"
   },
   "engines": {
     "node": "20.x"
   },
   "dependencies": {
+    "@prisma/adapter-d1": "^6.19.3",
     "@prisma/client": "^6.5.0",
     "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-react": "^5.0.4",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
-    "express": "^4.21.2",
+    "express": "^5.3.0",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
@@ -42,6 +55,8 @@
     "tsx": "^4.21.0"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261113.1",
+    "@prisma/internals": "^6.19.3",
     "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
@@ -55,7 +70,8 @@
     "prisma": "^6.5.0",
     "tailwindcss": "^4.1.14",
     "typescript": "~5.8.2",
-    "vite": "^6.2.3"
+    "vite": "^6.2.3",
+    "wrangler": "^4.161.0"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

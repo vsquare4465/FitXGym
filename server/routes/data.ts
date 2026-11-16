@@ -1,6 +1,7 @@
 import { Router } from 'express';
-import bcrypt from 'bcryptjs';
-import { prisma } from '../db.js';
+import { mediaUploads } from '@fitx/media';
+import bcrypt from '@fitx/password';
+import { prisma, atomic, saveRows } from '@fitx/db';
 import { authMiddleware, requireAdmin, requirePermission } from '../middleware/auth.js';
 import { isPaymentExempt } from '../lib/permissions.js';
 import { toClientMember } from '../lib/memberMapper.js';
@@ -15,6 +16,7 @@ import { addPlanDuration } from '../lib/planDates.js';
 const router = Router();
 router.use(authMiddleware);
 router.use(requireAdmin());
+router.use(mediaUploads);
 
 function formatAuditTime() {
   return istNowTime(new Date(), true);
@@ -162,7 +164,7 @@ router.post('/members', requirePermission('members', 'write'), async (req, res) 
     : [];
 
   try {
-    const created = await prisma.$transaction(async (tx) => {
+    const created = await atomic(async (tx) => {
       const id = await nextMemberId(tx);
       const member = await tx.member.create({
         data: {
@@ -439,7 +441,7 @@ router.post('/members/:id/renew', requirePermission('members', 'write'), async (
   const paid = paymentExempt ? 0 : paidParsed.value;
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await atomic(async (tx) => {
       const membership = await tx.membership.create({
         data: {
           memberId: member.id,
@@ -554,7 +556,8 @@ router.post('/payments', requirePermission('payments', 'write'), async (req, res
   const amount = paidParsed.value;
   const status = p.status === 'Pending' || amount <= 0 ? 'Pending' : p.status === 'Failed' ? 'Failed' : 'Completed';
   try {
-    const created = await prisma.payment.create({
+    const created = await atomic(async (tx) => {
+    const created = await tx.payment.create({
       data: {
         memberId: member.id,
         memberName: p.memberName || member.name,
@@ -572,14 +575,16 @@ router.post('/payments', requirePermission('payments', 'write'), async (req, res
       },
     });
     if (p.membershipId && amount > 0) {
-      const ms = await prisma.membership.findUnique({ where: { id: String(p.membershipId) } });
+      const ms = await tx.membership.findUnique({ where: { id: String(p.membershipId) } });
       if (ms) {
-        await prisma.membership.update({
+        await tx.membership.update({
           where: { id: String(p.membershipId) },
-          data: { paidAmount: ms.paidAmount + amount },
+          data: { paidAmount: { increment: amount } },
         });
       }
     }
+      return created;
+    });
     await addLog(`PAYMENT: Rs.${amount} from ${created.memberName} (${created.category})`);
     res.json(created);
   } catch (err) {
@@ -595,7 +600,7 @@ router.put('/payments/:id', requirePermission('payments', 'write'), async (req, 
 
 router.delete('/payments/:id', requirePermission('payments', 'write'), async (req, res) => {
   try {
-    const existing = await prisma.$transaction(async (tx) => {
+    const existing = await atomic(async (tx) => {
       const row = await tx.payment.findUnique({ where: { id: req.params.id } });
       if (!row) return null;
       await tx.payment.delete({ where: { id: row.id } });
@@ -637,9 +642,7 @@ router.put('/expenses/:id', requirePermission('expenses', 'write'), async (req, 
 
 router.put('/expenses', requirePermission('expenses', 'write'), async (req, res) => {
   const expenses = req.body;
-  for (const e of expenses) {
-    await prisma.expense.upsert({ where: { id: e.id }, create: e, update: e });
-  }
+  await saveRows('expense', expenses);
   res.json(expenses);
 });
 
@@ -749,7 +752,8 @@ router.post('/leads/:id/convert', requirePermission('leads', 'write'), async (re
   const passwordHash = await bcrypt.hash('123456', 10);
   const email = lead.email || `${lead.phone}@fitxgym.local`;
 
-  const member = await prisma.member.create({
+  const member = await atomic(async (tx) => {
+  const member = await tx.member.create({
     data: {
       id, name: lead.name, email, phone: lead.phone,
       whatsapp: lead.whatsapp || lead.phone,
@@ -761,15 +765,17 @@ router.post('/leads/:id/convert', requirePermission('leads', 'write'), async (re
     },
   });
 
-  await prisma.user.create({
+  await tx.user.create({
     data: { email, passwordHash, name: lead.name, role: 'MEMBER', memberId: id },
   });
 
-  await prisma.membership.create({
+  await tx.membership.create({
     data: { memberId: id, planId, startDate: joinDate, endDate: expiryDate, status: 'Active', amount: plan?.price || 0, paidAmount: 0 },
   });
 
-  await prisma.lead.update({ where: { id: lead.id }, data: { status: 'Converted' } });
+  await tx.lead.update({ where: { id: lead.id }, data: { status: 'Converted' } });
+    return member;
+  });
   await addLog(`LEAD: Converted ${lead.name} to member ${id}`);
   res.json(toClientMember(member));
 });
@@ -787,9 +793,7 @@ router.get('/staff', async (_req, res) => {
 
 router.put('/staff', async (req, res) => {
   const staff = req.body;
-  for (const s of staff) {
-    await prisma.staff.upsert({ where: { id: s.id }, create: s, update: s });
-  }
+  await saveRows('staff', staff);
   res.json(staff);
 });
 
@@ -799,9 +803,7 @@ router.get('/inventory', async (_req, res) => {
 
 router.put('/inventory', async (req, res) => {
   const items = req.body;
-  for (const i of items) {
-    await prisma.inventoryItem.upsert({ where: { id: i.id }, create: i, update: i });
-  }
+  await saveRows('inventoryItem', items);
   res.json(items);
 });
 
@@ -820,14 +822,14 @@ router.post('/audit-logs', async (req, res) => {
 router.get('/qr-token', requirePermission('attendance', 'read'), async (_req, res) => {
   let token = await prisma.qrToken.findFirst({ where: { isActive: true }, orderBy: { createdAt: 'desc' } });
   if (!token) {
-    token = await prisma.qrToken.create({ data: { token: `FTX_${Date.now()}` } });
+    token = await prisma.qrToken.create({ data: { token: `FTX_${crypto.randomUUID()}` } });
   }
   res.json({ token: token.token });
 });
 
 router.post('/qr-token/rotate', requirePermission('attendance', 'write'), async (_req, res) => {
-  await prisma.qrToken.updateMany({ data: { isActive: false } });
-  const token = await prisma.qrToken.create({ data: { token: `FTX_${Date.now()}` } });
+  await saveRows('qrToken', [{ token: `FTX_${crypto.randomUUID()}`, isActive: true }], 'id', true);
+  const token = await prisma.qrToken.findFirst({ where: { isActive: true } });
   await addLog('SECURITY: Rotated lobby QR token');
   res.json({ token: token.token });
 });
@@ -842,13 +844,9 @@ router.get('/settings', requirePermission('dashboard', 'read'), async (_req, res
 
 router.put('/settings', requirePermission('website', 'write'), async (req, res) => {
   const settings = req.body as Record<string, string>;
-  for (const [key, value] of Object.entries(settings)) {
-    let stored = value;
-    if (key === 'whatsapp') stored = normalizeWhatsAppNumber(value);
-    await prisma.websiteSetting.upsert({
-      where: { key }, create: { key, value: stored }, update: { value: stored },
-    });
-  }
+  await saveRows('websiteSetting', Object.entries(settings).map(([key, value]) => ({
+    key, value: key === 'whatsapp' ? normalizeWhatsAppNumber(value) : value,
+  })), 'key');
   await addLog('WEBSITE: Updated site content');
   res.json(settings);
 });
@@ -869,16 +867,13 @@ function dedupeGalleryItems<T extends { url: string }>(items: T[]): T[] {
 
 router.put('/gallery', requirePermission('website', 'write'), async (req, res) => {
   const items = dedupeGalleryItems(req.body as Array<{ id?: string; url: string; caption?: string; featured?: boolean; active?: boolean; sortOrder?: number }>);
-  await prisma.galleryImage.deleteMany();
-  await prisma.galleryImage.createMany({
-    data: items.map((item, i) => ({
+  await saveRows('galleryImage', items.map((item, i) => ({
       url: item.url,
       caption: item.caption ?? '',
       featured: item.featured ?? false,
       active: item.active ?? true,
       sortOrder: item.sortOrder ?? i,
-    })),
-  });
+    })), 'id', true);
   const images = await prisma.galleryImage.findMany({ orderBy: { sortOrder: 'asc' } });
   res.json(images);
 });

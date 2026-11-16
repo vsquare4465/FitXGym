@@ -1,0 +1,82 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "fitx-gym",
+  "main": "cloudflare/worker.ts",
+  "account_id": "5462c982f4be958c61aba04069f0a333",
+  "compatibility_date": "2026-11-13",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "workers_dev": true,
+  "build": {
+    "command": "npm run build:cf"
+  },
+  "alias": {
+    "@fitx/db": "./cloudflare/db.ts",
+    "@fitx/config": "./cloudflare/config.ts",
+    "@fitx/password": "./cloudflare/password.ts",
+    "@fitx/rateLimit": "./cloudflare/rateLimit.ts",
+    "@fitx/media": "./cloudflare/media.ts"
+  },
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": [
+      "/api",
+      "/api/*"
+    ]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "fitx-gym-db",
+      "database_id": "0949ab84-751d-406c-b6fd-6c3d89ca6074",
+      "migrations_dir": "cloudflare/migrations"
+    }
+  ],
+  "vars": {
+    "NODE_ENV": "production",
+    "TRUST_PROXY": "true",
+    "SEED_DEMO_DATA": "false",
+    "SMTP_HOST": "smtpout.secureserver.net",
+    "SMTP_PORT": "465",
+    "SMTP_USER": "deepaksolanki@fitxgymkhurja.com",
+    "OTP_FROM_EMAIL": "Fit X Gym <deepaksolanki@fitxgymkhurja.com>"
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 0.1,
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.01
+    }
+  },
+  "kv_namespaces": [
+    {
+      "binding": "MEDIA",
+      "id": "ab871c892a3545ab82a00f42fd72450e"
+    }
+  ],
+  "secrets": {
+    "required": [
+      "JWT_SECRET",
+      "AUTH_PEPPER"
+    ]
+  },
+  "triggers": {
+    "crons": [
+      "17 20 * * *"
+    ]
+  },
+  "routes": [
+    {
+      "pattern": "fitxgymkhurja.com/*",
+      "zone_id": "4385e59d2f875301859a2f0b00dfc772"
+    },
+    {
+      "pattern": "www.fitxgymkhurja.com/*",
+      "zone_id": "4385e59d2f875301859a2f0b00dfc772"
+    }
+  ]
+}
