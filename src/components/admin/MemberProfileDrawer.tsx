@@ -495,7 +495,9 @@ export default function MemberProfileDrawer({ memberId, plans, gymName, onClose,
               <input inputMode="numeric" maxLength={12} placeholder="Aadhaar (optional, 12 digits)" value={editForm.aadhaar} onChange={e => { setEditForm({ ...editForm, aadhaar: digitsOnly(e.target.value).slice(0, 12) }); setEditError(''); }} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
               <AadhaarPicker value={editForm.idProofUrl} onChange={idProofUrl => setEditForm(current => ({ ...current, idProofUrl }))} onBusyChange={setDocumentBusy} />
               <input placeholder="WhatsApp" value={editForm.whatsapp} onChange={e => setEditForm({ ...editForm, whatsapp: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
-              <input type="date" placeholder="Date of birth" value={editForm.dateOfBirth} onChange={e => setEditForm({ ...editForm, dateOfBirth: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
+              <label className="block text-xs text-zinc-400">Date of birth (DOB)
+                <input type="date" value={editForm.dateOfBirth} onChange={e => setEditForm({ ...editForm, dateOfBirth: e.target.value })} className="mt-1 w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm text-white" />
+              </label>
               <label className="block text-xs text-zinc-500">Joining date
                 <input type="date" value={editForm.joinDate} onChange={e => setEditForm({ ...editForm, joinDate: e.target.value, planStartDate: e.target.value })} className="mt-1 w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm text-white" />
               </label>
