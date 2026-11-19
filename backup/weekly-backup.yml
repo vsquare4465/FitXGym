@@ -1,0 +1,61 @@
+# Deploy this workflow only to the PRIVATE vsquare4465/FitXGym-backups repository.
+name: Weekly FitX backup
+on:
+  schedule:
+    - cron: '47 21 * * 6' # Sunday 03:17 Asia/Kolkata
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fitx-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    if: github.repository == 'vsquare4465/FitXGym-backups' && vars.BACKUPS_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: write # Retain only the newest eight successful backup artifacts.
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Fetch application source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: vsquare4465/FitXGym
+          ref: main
+          path: app-source
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Export, encrypt and restore-test backup
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          FITX_RECOVERY_SECRETS: ${{ secrets.FITX_RECOVERY_SECRETS }}
+          FITX_BACKUP_KEY: ${{ secrets.FITX_BACKUP_KEY }}
+          FITX_SOURCE_DIR: app-source
+          FITX_OUTPUT_DIR: encrypted-output
+        run: node backup/run.mjs
+      - name: Store encrypted backup
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: fitx-backup-${{ github.run_id }}-${{ github.run_attempt }}
+          path: encrypted-output/*
+          if-no-files-found: error
+          retention-days: 56
+          compression-level: 0
+      - name: Keep the eight newest copies
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node backup/retention.mjs
+      - name: Report failure
+        if: failure()
+        run: |
+          echo '::error::Backup failed. Check this run; do not rely on it as a new recovery point. Previous backups are retained until their expiry.'
+          echo 'Backup failed. Check the failed step and existing backup dates.' >> "$GITHUB_STEP_SUMMARY"

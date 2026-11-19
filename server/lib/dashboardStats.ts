@@ -4,6 +4,7 @@ import { istToday } from './ist.js';
 import { computeMemberDisplayStatus, memberHasPendingPayment } from './memberStatus.js';
 import { isPaymentExempt } from './permissions.js';
 import { toClientMember } from './memberMapper.js';
+import { memberOutstandingBalance } from './memberBalance.js';
 
 const MEMBERSHIP_CATEGORIES = [
   'Membership',
@@ -175,7 +176,7 @@ export async function getMemberProfile(memberId: string) {
 
   const [memberships, payments, attendance, plans, pendingPayments] = await Promise.all([
     prisma.membership.findMany({ where: { memberId }, orderBy: { startDate: 'desc' } }),
-    prisma.payment.findMany({ where: { memberId }, orderBy: { date: 'desc' } }),
+    prisma.payment.findMany({ where: { memberId }, orderBy: [{ date: 'desc' }, { createdAt: 'desc' }] }),
     prisma.attendanceRecord.findMany({ where: { memberId }, orderBy: { date: 'desc' }, take: 30 }),
     prisma.plan.findMany(),
     prisma.payment.findMany({ where: { memberId, status: 'Pending' } }),
@@ -184,26 +185,21 @@ export async function getMemberProfile(memberId: string) {
   const planMap = Object.fromEntries(plans.map(p => [p.id, p]));
   const currentMembership = memberships[0];
   const currentPlan = planMap[member.planId];
-  const hasPending = memberHasPendingPayment(pendingPayments, memberships, memberId);
   const totalVisits = attendance.length;
   const lastVisit = attendance[0];
 
   const currentAmount = currentMembership?.amount ?? currentPlan?.price ?? 0;
   const currentPaid = currentMembership?.paidAmount ?? 0;
-  const membershipOwed = Math.max(0, currentAmount - currentPaid);
-  const pendingFromRecords = pendingPayments.reduce((sum, p) => {
-    if (p.expectedAmount != null && p.expectedAmount > p.amount) {
-      return sum + (p.expectedAmount - p.amount);
-    }
-    return sum + p.amount;
-  }, 0);
+  const pendingAmount = isPaymentExempt(member.membershipType) ? 0
+    : Math.max(memberOutstandingBalance(memberships, pendingPayments, memberId),
+      currentMembership ? 0 : Math.max(0, currentAmount - currentPaid));
 
   return {
     member: toClientMember(member),
     displayStatus: computeMemberDisplayStatus(
       member.status,
       member.expiryDate,
-      hasPending,
+      pendingAmount > 0,
       isPaymentExempt(member.membershipType),
     ),
     currentMembership: currentMembership
@@ -225,6 +221,6 @@ export async function getMemberProfile(memberId: string) {
       lastVisit: lastVisit || null,
       recent: attendance,
     },
-    pendingAmount: Math.max(membershipOwed, pendingFromRecords),
+    pendingAmount,
   };
 }

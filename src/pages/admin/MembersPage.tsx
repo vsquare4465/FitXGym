@@ -8,6 +8,7 @@ import { addPlanDuration, getMemberDisplayStatus, todayISO } from '../../lib/mem
 import StatusBadge from '../../components/admin/StatusBadge';
 import MemberProfileDrawer from '../../components/admin/MemberProfileDrawer';
 import MemberPhotoPicker, { MemberAvatar } from '../../components/admin/MemberPhotoPicker';
+import AadhaarPicker from '../../components/admin/AadhaarPicker';
 import { adminApi } from '../../api/client';
 import { fillTemplate, openWhatsApp, WHATSAPP_TEMPLATES } from '../../lib/whatsapp';
 import { aadhaarValidationMessage, digitsOnly, parseOptionalAmount, phoneValidationMessage, shortAddress } from '../../lib/validation';
@@ -19,6 +20,7 @@ const EMPTY_ADD = {
   name: '',
   phone: '',
   aadhaar: '',
+  idProofUrl: '',
   address: '',
   photo: '',
   planId: '',
@@ -28,9 +30,7 @@ const EMPTY_ADD = {
   payMode: 'later' as PayMode,
   membershipType: 'Paid' as MembershipType,
   gender: '',
-  alcoholic: false,
   weight: '',
-  notes: '',
   joinDate: todayISO(),
   planStartDate: todayISO(),
   expiryDate: '',
@@ -39,6 +39,7 @@ const EMPTY_ADD = {
 export default function MembersPage() {
   const { can } = useAuth();
   const { members, payments, plans, settings, refresh } = useGymData();
+  const [documentBusy, setDocumentBusy] = useState(false);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -91,7 +92,7 @@ export default function MembersPage() {
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (saving) return;
+    if (saving || documentBusy) return;
     setFormError('');
     if (!form.name.trim()) {
       setFormError("Enter the member's full name.");
@@ -137,6 +138,7 @@ export default function MembersPage() {
         name: form.name.trim(),
         phone: form.phone.trim(),
         aadhaar: digitsOnly(form.aadhaar) || undefined,
+        idProofUrl: form.idProofUrl,
         address: shortAddress(form.address) || undefined,
         photo: form.photo || undefined,
         planId: selectedPlanId,
@@ -145,9 +147,7 @@ export default function MembersPage() {
         discount: discountParsed.value || 0,
         paymentMethod: form.payMode === 'now' ? form.paymentMethod : 'Cash',
         gender: form.gender || undefined,
-        alcoholic: form.alcoholic,
         weight: form.weight.trim() || undefined,
-        notes: form.notes.trim() || undefined,
         joinDate: form.joinDate,
         planStartDate: planStart,
         expiryDate,
@@ -306,6 +306,7 @@ export default function MembersPage() {
             <input required placeholder="Full name" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
             <input inputMode="numeric" placeholder="10-digit mobile (optional)" value={form.phone} onChange={e => { setForm({ ...form, phone: e.target.value }); setFormError(''); }} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
             <input inputMode="numeric" maxLength={12} placeholder="Aadhaar (optional, 12 digits)" value={form.aadhaar} onChange={e => { setForm({ ...form, aadhaar: digitsOnly(e.target.value).slice(0, 12) }); setFormError(''); }} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
+            <AadhaarPicker value={form.idProofUrl} onChange={idProofUrl => setForm(current => ({ ...current, idProofUrl }))} onBusyChange={setDocumentBusy} />
             <input maxLength={80} placeholder="Address (area / locality, e.g. Senthli, Khurja)" value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
             <div className="grid grid-cols-2 gap-2">
               {(['Male', 'Female'] as const).map(g => (
@@ -315,12 +316,7 @@ export default function MembersPage() {
                 </label>
               ))}
             </div>
-            <label className="flex items-center gap-2 text-sm text-zinc-300">
-              <input type="checkbox" checked={form.alcoholic} onChange={e => setForm({ ...form, alcoholic: e.target.checked })} className="rounded border-zinc-600" />
-              Consumes alcohol
-            </label>
             <input type="text" inputMode="decimal" placeholder="Weight in kg (optional)" value={form.weight} onChange={e => setForm({ ...form, weight: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm" />
-            <textarea placeholder="Optional notes — vitals, measurements, or anything else" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm resize-none" />
             <select value={form.membershipType} onChange={e => setForm({ ...form, membershipType: e.target.value as MembershipType, paidAmount: e.target.value !== 'Paid' ? '' : form.paidAmount })} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm">
               <option value="Paid">Paid member</option>
               <option value="Complimentary">Complimentary (free / known person)</option>
@@ -388,7 +384,7 @@ export default function MembersPage() {
               <p className="text-xs text-violet-300">No payment will be recorded for complimentary / staff members.</p>
             )}
             {formError && <p className="text-xs text-red-400">{formError}</p>}
-            <button type="submit" disabled={saving} className="w-full py-2.5 rounded-lg bg-orange-600 text-black font-semibold text-sm disabled:opacity-50">
+            <button type="submit" disabled={saving || documentBusy} className="w-full py-2.5 rounded-lg bg-orange-600 text-black font-semibold text-sm disabled:opacity-50">
               {saving ? 'Creating...' : 'Create member'}
             </button>
           </form>

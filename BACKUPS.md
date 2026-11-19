@@ -1,5 +1,7 @@
 # Manual FitX Gym backups
 
+An automatic encrypted weekly backup workflow has also been prepared in the private `vsquare4465/FitXGym-backups` GitHub repository. Recovery and encryption secrets have been saved with the owner's approval. GitHub's account-wide Actions budget was verified as $0 with usage blocked on 2026-11-19. **It is not active yet:** creation/storage of the restricted Cloudflare backup token and the first live backup run remain pending. See [cloud backup setup and recovery](backup/README.md). Existing manual backups below continue to work.
+
 Double-click **Backup Gym.cmd** in this project, or run `npm run backup:cf` here. Keep this PC online until it says **Backup complete**. If login has expired, run `npx wrangler login`, then retry. The website keeps running when the PC is off; only this manual backup needs the PC.
 
 Back up at the end of each working day and before large edits/deletions. Use a quiet period when staff have finished saving records: D1 and KV are separate services, so this is not one atomic snapshot across both. Changes after the database export belong to the next backup.

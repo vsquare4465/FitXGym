@@ -3,6 +3,7 @@ import { Plan, Member } from '../types';
 import { MEMBERSHIP_PLANS } from '../data/mockData';
 import { User, Phone, Mail, Award, Clipboard, ShieldCheck, Heart, Users, CreditCard, ChevronRight, CheckCircle2, QrCode, Camera, Upload, AlertTriangle } from 'lucide-react';
 import { isValidEmail, phoneValidationMessage } from '../lib/validation';
+import AadhaarPicker from './admin/AadhaarPicker';
 import { motion } from 'motion/react';
 
 interface RegistrationPortalProps {
@@ -18,10 +19,8 @@ export default function RegistrationPortal({ plans = [], onRegisterSuccess, preS
   const [phone, setPhone] = useState('');
   const [photo, setPhoto] = useState('');
   const [idProof, setIdProof] = useState('');
+  const [documentBusy, setDocumentBusy] = useState(false);
   const [password, setPassword] = useState('');
-  const [emergencyName, setEmergencyName] = useState('');
-  const [emergencyPhone, setEmergencyPhone] = useState('');
-  const [emergencyRelation, setEmergencyRelation] = useState('');
   const [medicalNotes, setMedicalNotes] = useState('');
   const [selectedPlanId, setSelectedPlanId] = useState(preSelectedPlanId || 'plan_quarterly');
   const [registerWithoutPlan, setRegisterWithoutPlan] = useState(false);
@@ -95,6 +94,7 @@ export default function RegistrationPortal({ plans = [], onRegisterSuccess, preS
   };
 
   const handleNextStep = () => {
+    if (documentBusy) return;
     if (step === 1) {
       if (!name || !email || !phone) return;
       
@@ -118,13 +118,13 @@ export default function RegistrationPortal({ plans = [], onRegisterSuccess, preS
       if (!isValid) return;
       setStep(2);
     } else if (step === 2) {
-      // Emergency contact should not be mandatory
       setStep(3);
     }
   };
 
   const handleRegisterSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (documentBusy || isPaying) return;
     setIsPaying(true);
 
     setTimeout(async () => {
@@ -160,11 +160,7 @@ export default function RegistrationPortal({ plans = [], onRegisterSuccess, preS
         expiryDate: finalExpiry,
         planId: finalPlanId,
         status: finalStatus,
-        emergencyContact: {
-          name: emergencyName,
-          phone: emergencyPhone,
-          relationship: emergencyRelation
-        },
+        emergencyContact: { name: '', phone: '', relationship: '' },
         medicalHistory: medicalNotes ? [medicalNotes] : ['None'],
         idProofUrl: idProof || '',
         qrCodeValue: qrValue,
@@ -217,9 +213,6 @@ export default function RegistrationPortal({ plans = [], onRegisterSuccess, preS
     setPhone('');
     setIdProof('');
     setPassword('');
-    setEmergencyName('');
-    setEmergencyPhone('');
-    setEmergencyRelation('');
     setMedicalNotes('');
     setRegisterWithoutPlan(false);
     setStep(1);
@@ -369,17 +362,7 @@ export default function RegistrationPortal({ plans = [], onRegisterSuccess, preS
                     )}
                   </div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] uppercase text-zinc-500 tracking-wider font-bold">AADHAAR / GOVT ID PROOF NO</label>
-                    <input 
-                      type="text" 
-                      required
-                      placeholder="xxxx-xxxx-xxxx" 
-                      value={idProof}
-                      onChange={(e) => setIdProof(e.target.value)}
-                      className="w-full px-4 py-3 bg-zinc-950 border border-zinc-800 focus:border-orange-500 rounded text-xs text-white focus:outline-none transition-all"
-                    />
-                  </div>
+                  <AadhaarPicker value={idProof} onChange={setIdProof} onBusyChange={setDocumentBusy} />
                 </div>
 
                 {/* Dynamic Camera or Upload Widget */}
@@ -472,59 +455,19 @@ export default function RegistrationPortal({ plans = [], onRegisterSuccess, preS
                 <button 
                   type="button" 
                   onClick={handleNextStep}
-                  disabled={!name || !email || !phone || !password}
+                  disabled={documentBusy || !name || !email || !phone || !password}
                   className="w-full py-3 bg-orange-600 hover:bg-orange-500 text-black font-extrabold uppercase tracking-wider text-xs rounded transition-all disabled:opacity-50 flex items-center justify-center gap-1"
                 >
-                  <span>PROCEED TO EMERGENCY DETAILS</span>
+                  <span>PROCEED TO HEALTH DETAILS</span>
                   <ChevronRight size={14} />
                 </button>
               </div>
             )}
 
-            {/* STEP 2: EMERGENCY CONTACTS & MEDICAL CONDITIONS */}
+            {/* STEP 2: MEDICAL CONDITIONS */}
             {step === 2 && (
               <div className="space-y-4">
                 
-                <div className="p-4 bg-zinc-950 border border-zinc-850 rounded-lg space-y-4">
-                  <div className="flex items-center gap-1.5 text-xs text-orange-500 font-bold uppercase tracking-wider">
-                    <Users size={16} />
-                    <span>Emergency Contact Parameters</span>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-[9px] uppercase text-zinc-500 font-bold">CONTACT NAME (OPTIONAL)</label>
-                      <input 
-                        type="text" 
-                        placeholder="E.g., Rohan Verma" 
-                        value={emergencyName}
-                        onChange={(e) => setEmergencyName(e.target.value)}
-                        className="w-full px-3 py-2.5 bg-zinc-900 border border-zinc-800 focus:border-orange-500 rounded text-xs text-white focus:outline-none"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[9px] uppercase text-zinc-500 font-bold">RELATIONSHIP (OPTIONAL)</label>
-                      <input 
-                        type="text" 
-                        placeholder="Brother/Father/Spouse" 
-                        value={emergencyRelation}
-                        onChange={(e) => setEmergencyRelation(e.target.value)}
-                        className="w-full px-3 py-2.5 bg-zinc-900 border border-zinc-800 focus:border-orange-500 rounded text-xs text-white focus:outline-none"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[9px] uppercase text-zinc-500 font-bold">EMERGENCY PHONE (OPTIONAL)</label>
-                      <input 
-                        type="tel" 
-                        placeholder="+91 XXXXX XXXXX" 
-                        value={emergencyPhone}
-                        onChange={(e) => setEmergencyPhone(e.target.value)}
-                        className="w-full px-3 py-2.5 bg-zinc-900 border border-zinc-800 focus:border-orange-500 rounded text-xs text-white focus:outline-none"
-                      />
-                    </div>
-                  </div>
-                </div>
-
                 <div className="p-4 bg-zinc-950 border border-zinc-850 rounded-lg space-y-3">
                   <div className="flex items-center gap-1.5 text-xs text-orange-500 font-bold uppercase tracking-wider">
                     <Heart size={16} />
@@ -676,7 +619,7 @@ export default function RegistrationPortal({ plans = [], onRegisterSuccess, preS
                   <button 
                     type="button" 
                     onClick={handleRegisterSubmit}
-                    disabled={isPaying}
+                    disabled={isPaying || documentBusy}
                     className="w-2/3 py-3.5 bg-gradient-to-r from-orange-600 to-amber-500 text-black font-extrabold uppercase tracking-wider text-xs rounded transition-all disabled:opacity-50"
                   >
                     {isPaying ? 'PROCESSING REGISTRATION...' : 'CONFIRM & REGISTER'}

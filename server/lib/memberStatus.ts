@@ -1,4 +1,5 @@
 import { daysUntil } from './dateRange.js';
+import { memberOutstandingBalance } from './memberBalance.js';
 
 export type MemberDisplayStatus =
   | 'Active'
@@ -28,18 +29,9 @@ export function computeMemberDisplayStatus(
 }
 
 export function memberHasPendingPayment(
-  pendingPayments: { memberId: string; status: string }[],
-  memberships: { memberId: string; amount: number; paidAmount: number; endDate: string }[],
+  pendingPayments: Parameters<typeof memberOutstandingBalance>[1],
+  memberships: Parameters<typeof memberOutstandingBalance>[0],
   memberId: string,
 ): boolean {
-  if (pendingPayments.some(p => p.memberId === memberId && p.status === 'Pending')) {
-    return true;
-  }
-  const current = memberships
-    .filter(m => m.memberId === memberId)
-    .sort((a, b) => b.endDate.localeCompare(a.endDate))[0];
-  if (current && current.amount > 0 && current.paidAmount < current.amount) {
-    return true;
-  }
-  return false;
+  return memberOutstandingBalance(memberships, pendingPayments, memberId) > 0;
 }

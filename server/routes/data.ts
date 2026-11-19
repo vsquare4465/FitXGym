@@ -178,6 +178,7 @@ router.post('/members', requirePermission('members', 'write'), async (req, res) 
           aadhaar,
           passwordHash,
           photo: typeof body.photo === 'string' ? body.photo : '',
+          idProofUrl: typeof body.idProofUrl === 'string' ? body.idProofUrl : '',
           joinDate,
           expiryDate,
           planId: plan.id,
